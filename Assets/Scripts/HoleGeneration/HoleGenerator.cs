@@ -2,9 +2,12 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// Generates a top-down par-3 golf hole from a lat/lon seed.
-/// Same coordinates always produce the same hole.
-/// Grid-based terrain: Rough, Fairway, Green, Sand, Water, Tee.
+/// Generates a top-down par-3 golf hole shaped by real-world surroundings.
+/// Takes a LocationProfile (from OSM data) + lat/lon seed.
+/// Same coordinates + same surroundings = same hole.
+///
+/// Biome affects: fairway width, bunker count, water placement, rough penalty,
+/// color palette, and overall hole character.
 /// </summary>
 public class HoleGenerator : MonoBehaviour
 {
@@ -13,7 +16,7 @@ public class HoleGenerator : MonoBehaviour
     public int gridHeight = 44;
     public float tileSize = 0.5f;
 
-    [Header("Terrain Colors")]
+    [Header("Default Terrain Colors")]
     public Color roughColor = new Color(0.15f, 0.38f, 0.12f);
     public Color fairwayColor = new Color(0.28f, 0.62f, 0.22f);
     public Color greenColor = new Color(0.42f, 0.78f, 0.32f);
@@ -21,6 +24,10 @@ public class HoleGenerator : MonoBehaviour
     public Color waterColor = new Color(0.18f, 0.42f, 0.72f);
     public Color teeColor = new Color(0.50f, 0.72f, 0.45f);
     public Color holeColor = new Color(0.08f, 0.08f, 0.08f);
+
+    // Active colors (may be overridden by biome)
+    private Color activeRoughColor;
+    private Color activeFairwayColor;
 
     // Internal state
     private TerrainType[,] terrainGrid;
@@ -31,11 +38,9 @@ public class HoleGenerator : MonoBehaviour
     private Vector2 pinPosition;
     private int greenRadius;
     private System.Random rng;
+    private LocationProfile profile;
 
-    // Cached tile parent
     private Transform tileParent;
-
-    // Pin visual
     private GameObject pinObject;
     private GameObject holeRingObject;
 
@@ -50,11 +55,17 @@ public class HoleGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// Main entry point. Clears previous hole and generates a new one.
+    /// Generate a hole using real-world location data.
     /// </summary>
-    public void GenerateHole(float latitude, float longitude)
+    public void GenerateHole(float latitude, float longitude, LocationProfile locationProfile)
     {
         ClearHole();
+
+        profile = locationProfile ?? LocationProfile.CreateDefault(latitude, longitude);
+
+        // Apply biome color overrides
+        activeRoughColor = profile.roughColorOverride ?? roughColor;
+        activeFairwayColor = profile.fairwayColorOverride ?? fairwayColor;
 
         int seed = HashCoordinates(latitude, longitude);
         rng = new System.Random(seed);
@@ -70,10 +81,19 @@ public class HoleGenerator : MonoBehaviour
         RenderGrid();
         CreatePinVisual();
 
-        Debug.Log($"Hole generated | seed={seed} | lat={latitude:F4} lon={longitude:F4}");
+        Debug.Log($"Hole generated | biome={profile.biome} | name={profile.holeName} | " +
+                  $"fw={profile.fairwayWidth:F1} bunkers={profile.bunkerCount} water={profile.waterHazardChance:F1}");
     }
 
-    // --- Terrain placement ---
+    /// <summary>
+    /// Fallback: generate without profile (uses default).
+    /// </summary>
+    public void GenerateHole(float latitude, float longitude)
+    {
+        GenerateHole(latitude, longitude, null);
+    }
+
+    // --- Terrain placement (now biome-aware) ---
 
     void FillGrid(TerrainType type)
     {
@@ -87,7 +107,6 @@ public class HoleGenerator : MonoBehaviour
         int cx = gridWidth / 2;
         int cy = 3;
 
-        // 3x2 tee box
         for (int x = cx - 1; x <= cx + 1; x++)
             for (int y = cy; y <= cy + 1; y++)
                 if (InBounds(x, y))
@@ -98,7 +117,7 @@ public class HoleGenerator : MonoBehaviour
 
     void PlaceGreen()
     {
-        greenRadius = 3 + rng.Next(2); // 3-4
+        greenRadius = 3 + rng.Next(2);
 
         int cx = gridWidth / 2 + rng.Next(-3, 4);
         int cy = gridHeight - greenRadius - 4 - rng.Next(4);
@@ -109,7 +128,6 @@ public class HoleGenerator : MonoBehaviour
         greenCenterGrid = new Vector2Int(cx, cy);
         greenCenterWorld = GridToWorld(cx, cy);
 
-        // Slightly elliptical green for variety
         float stretchX = 0.8f + (float)rng.NextDouble() * 0.4f;
         float stretchY = 0.8f + (float)rng.NextDouble() * 0.4f;
 
@@ -124,7 +142,6 @@ public class HoleGenerator : MonoBehaviour
             }
         }
 
-        // Pin: random offset within green
         float pinOX = (float)(rng.NextDouble() * 2 - 1) * (greenRadius * 0.4f);
         float pinOY = (float)(rng.NextDouble() * 2 - 1) * (greenRadius * 0.4f);
         int pinGX = cx + Mathf.RoundToInt(pinOX);
@@ -137,12 +154,41 @@ public class HoleGenerator : MonoBehaviour
         Vector2 start = new Vector2(gridWidth / 2f, 5);
         Vector2 end = new Vector2(greenCenterGrid.x, greenCenterGrid.y);
 
-        int width = 2 + rng.Next(2); // 2-3 tiles each side
+        // Fairway width scaled by biome
+        int baseWidth = 2 + rng.Next(2);
+        int width = Mathf.RoundToInt(baseWidth * profile.fairwayWidth);
+        width = Mathf.Clamp(width, 1, 6);
+
         int steps = 50;
 
-        // Pick a random wobble pattern
-        float wobbleAmp = 1.5f + (float)rng.NextDouble() * 2f;
-        float wobbleFreq = 1.5f + (float)rng.NextDouble() * 1.5f;
+        // Forest/Urban = tighter wobble, Park/Farmland = gentle
+        float wobbleAmp;
+        float wobbleFreq;
+
+        switch (profile.biome)
+        {
+            case LocationProfile.Biome.Forest:
+                wobbleAmp = 2.5f + (float)rng.NextDouble() * 1.5f;
+                wobbleFreq = 2.5f + (float)rng.NextDouble() * 1f;
+                break;
+            case LocationProfile.Biome.Urban:
+                wobbleAmp = 1.0f + (float)rng.NextDouble() * 0.5f;
+                wobbleFreq = 1.0f + (float)rng.NextDouble() * 0.5f;
+                break;
+            case LocationProfile.Biome.Coastal:
+                wobbleAmp = 2.0f + (float)rng.NextDouble() * 2f;
+                wobbleFreq = 1.5f + (float)rng.NextDouble() * 1f;
+                break;
+            case LocationProfile.Biome.Farmland:
+            case LocationProfile.Biome.Park:
+                wobbleAmp = 0.8f + (float)rng.NextDouble() * 1f;
+                wobbleFreq = 1.0f + (float)rng.NextDouble() * 0.5f;
+                break;
+            default:
+                wobbleAmp = 1.5f + (float)rng.NextDouble() * 2f;
+                wobbleFreq = 1.5f + (float)rng.NextDouble() * 1.5f;
+                break;
+        }
 
         for (int i = 0; i <= steps; i++)
         {
@@ -150,10 +196,7 @@ public class HoleGenerator : MonoBehaviour
             float baseX = Mathf.Lerp(start.x, end.x, t);
             float baseY = Mathf.Lerp(start.y, end.y, t);
 
-            // Sinusoidal wobble
             float wobble = Mathf.Sin(t * wobbleFreq * Mathf.PI) * wobbleAmp;
-
-            // Taper fairway: wider in middle, narrower at tee and green
             float taper = Mathf.Sin(t * Mathf.PI);
             int currentWidth = Mathf.RoundToInt(width * (0.6f + 0.4f * taper));
 
@@ -170,34 +213,124 @@ public class HoleGenerator : MonoBehaviour
 
     void PlaceBunkers()
     {
-        int count = 1 + rng.Next(3); // 1-3
+        int count = profile.bunkerCount;
 
-        for (int b = 0; b < count; b++)
+        // Greenside bunkers
+        int greensideBunkers = Mathf.Min(count, 3);
+        for (int b = 0; b < greensideBunkers; b++)
         {
             float angle = (float)rng.NextDouble() * Mathf.PI * 2f;
             float dist = greenRadius + 1.5f + (float)rng.NextDouble() * 2.5f;
 
             int bx = Mathf.RoundToInt(greenCenterGrid.x + Mathf.Cos(angle) * dist);
             int by = Mathf.RoundToInt(greenCenterGrid.y + Mathf.Sin(angle) * dist);
+
+            // Coastal/Desert = bigger bunkers
             int radius = 1 + rng.Next(2);
+            if (profile.biome == LocationProfile.Biome.Coastal ||
+                profile.biome == LocationProfile.Biome.Desert)
+                radius += 1;
 
             PaintCircle(bx, by, radius, TerrainType.Sand, true);
         }
 
-        // Occasional fairway bunker (30% chance)
-        if (rng.NextDouble() < 0.3)
+        // Fairway bunkers (remaining count)
+        int fairwayBunkers = count - greensideBunkers;
+        for (int b = 0; b < fairwayBunkers; b++)
         {
-            int fbx = gridWidth / 2 + (rng.Next(2) == 0 ? -4 : 4) + rng.Next(-1, 2);
-            int fby = gridHeight / 3 + rng.Next(4);
-            PaintCircle(fbx, fby, 1 + rng.Next(1), TerrainType.Sand, true);
+            int side = rng.Next(2) == 0 ? -1 : 1;
+            int fbx = gridWidth / 2 + side * (3 + rng.Next(3)) + rng.Next(-1, 2);
+            int fby = gridHeight / 4 + rng.Next(gridHeight / 3);
+
+            int radius = 1 + rng.Next(2);
+            PaintCircle(fbx, fby, radius, TerrainType.Sand, true);
         }
     }
 
     void PlaceWater()
     {
-        // 50% chance of water
-        if (rng.NextDouble() < 0.5) return;
+        // Water chance driven by biome profile
+        if ((float)rng.NextDouble() > profile.waterHazardChance) return;
 
+        switch (profile.waterSide)
+        {
+            case LocationProfile.WaterSide.Surround:
+                PlaceIslandGreenWater();
+                break;
+            case LocationProfile.WaterSide.Front:
+                PlaceFrontalWater();
+                break;
+            case LocationProfile.WaterSide.Left:
+                PlaceSideWater(-1);
+                break;
+            case LocationProfile.WaterSide.Right:
+                PlaceSideWater(1);
+                break;
+            default:
+                PlaceDefaultWater();
+                break;
+        }
+    }
+
+    void PlaceIslandGreenWater()
+    {
+        // Water surrounds the green — island green effect
+        int waterRadius = greenRadius + 3;
+        for (int x = 0; x < gridWidth; x++)
+        {
+            for (int y = 0; y < gridHeight; y++)
+            {
+                float dist = Vector2.Distance(
+                    new Vector2(x, y),
+                    new Vector2(greenCenterGrid.x, greenCenterGrid.y)
+                );
+                // Water ring: between green edge and water radius
+                if (dist > greenRadius + 0.5f && dist <= waterRadius)
+                {
+                    if (terrainGrid[x, y] != TerrainType.Green && terrainGrid[x, y] != TerrainType.Tee)
+                    {
+                        // Leave a narrow fairway approach path
+                        float angleToTee = Mathf.Atan2(3 - greenCenterGrid.y, gridWidth / 2 - greenCenterGrid.x);
+                        float angleToTile = Mathf.Atan2(y - greenCenterGrid.y, x - greenCenterGrid.x);
+                        float angleDiff = Mathf.Abs(Mathf.DeltaAngle(angleToTee * Mathf.Rad2Deg, angleToTile * Mathf.Rad2Deg));
+
+                        if (angleDiff > 25f) // Don't flood the approach path
+                            terrainGrid[x, y] = TerrainType.Water;
+                    }
+                }
+            }
+        }
+    }
+
+    void PlaceFrontalWater()
+    {
+        // Water in front of the green
+        int wx = greenCenterGrid.x;
+        int wy = greenCenterGrid.y - greenRadius - 3;
+        int rx = 4 + rng.Next(3);
+        int ry = 2 + rng.Next(2);
+
+        PaintEllipse(wx, wy, rx, ry, TerrainType.Water);
+    }
+
+    void PlaceSideWater(int side)
+    {
+        // Water along one side of the fairway (like a canal or pond)
+        int wx = gridWidth / 2 + side * (5 + rng.Next(2));
+        int startY = gridHeight / 4;
+        int endY = gridHeight * 3 / 4;
+
+        // Elongated water body along the side
+        int rx = 2 + rng.Next(2);
+        int ry = (endY - startY) / 2;
+        int wy = (startY + endY) / 2;
+
+        PaintEllipse(wx, wy, rx, ry, TerrainType.Water);
+    }
+
+    void PlaceDefaultWater()
+    {
+        // Original random water placement
         int side = rng.Next(2) == 0 ? -1 : 1;
         int wx = gridWidth / 2 + side * (4 + rng.Next(3));
         int wy = gridHeight / 3 + rng.Next(gridHeight / 4);
@@ -205,17 +338,22 @@ public class HoleGenerator : MonoBehaviour
         int rx = 2 + rng.Next(2);
         int ry = 2 + rng.Next(3);
 
-        for (int x = wx - rx; x <= wx + rx; x++)
+        PaintEllipse(wx, wy, rx, ry, TerrainType.Water);
+    }
+
+    void PaintEllipse(int cx, int cy, int rx, int ry, TerrainType type)
+    {
+        for (int x = cx - rx; x <= cx + rx; x++)
         {
-            for (int y = wy - ry; y <= wy + ry; y++)
+            for (int y = cy - ry; y <= cy + ry; y++)
             {
                 if (!InBounds(x, y)) continue;
-                float dx = (float)(x - wx) / rx;
-                float dy = (float)(y - wy) / ry;
+                float dx = (float)(x - cx) / rx;
+                float dy = (float)(y - cy) / ry;
                 if (dx * dx + dy * dy <= 1f)
                 {
                     if (terrainGrid[x, y] != TerrainType.Green && terrainGrid[x, y] != TerrainType.Tee)
-                        terrainGrid[x, y] = TerrainType.Water;
+                        terrainGrid[x, y] = type;
                 }
             }
         }
@@ -268,7 +406,6 @@ public class HoleGenerator : MonoBehaviour
                 sr.color = GetTerrainColor(terrainGrid[x, y]);
                 sr.sortingOrder = 0;
 
-                // Scale sprite to tile size with tiny gap for grid effect
                 float scale = tileSize * 0.96f;
                 tile.transform.localScale = new Vector3(scale, scale, 1f);
 
@@ -279,7 +416,6 @@ public class HoleGenerator : MonoBehaviour
 
     void CreatePinVisual()
     {
-        // Hole (dark circle)
         holeRingObject = new GameObject("HoleRing");
         holeRingObject.transform.position = new Vector3(pinPosition.x, pinPosition.y, -0.3f);
         holeRingObject.transform.SetParent(transform);
@@ -289,7 +425,6 @@ public class HoleGenerator : MonoBehaviour
         holeSR.sortingOrder = 1;
         holeRingObject.transform.localScale = new Vector3(0.3f, 0.3f, 1f);
 
-        // Pin flag (small red square above hole)
         pinObject = new GameObject("Pin");
         pinObject.transform.position = new Vector3(pinPosition.x + 0.08f, pinPosition.y + 0.2f, -0.4f);
         pinObject.transform.SetParent(transform);
@@ -299,7 +434,6 @@ public class HoleGenerator : MonoBehaviour
         pinSR.sortingOrder = 2;
         pinObject.transform.localScale = new Vector3(0.15f, 0.12f, 1f);
 
-        // Flagpole (thin white line)
         GameObject pole = new GameObject("Pole");
         pole.transform.position = new Vector3(pinPosition.x, pinPosition.y + 0.1f, -0.35f);
         pole.transform.SetParent(transform);
@@ -310,7 +444,7 @@ public class HoleGenerator : MonoBehaviour
         pole.transform.localScale = new Vector3(0.02f, 0.25f, 1f);
     }
 
-    // --- Sprite creation (runtime, no asset files needed) ---
+    // --- Sprite creation ---
 
     private static Sprite cachedSquareSprite;
     private static Sprite cachedCircleSprite;
@@ -341,13 +475,11 @@ public class HoleGenerator : MonoBehaviour
         float radius = size / 2f;
 
         for (int y = 0; y < size; y++)
-        {
             for (int x = 0; x < size; x++)
             {
                 float dist = Vector2.Distance(new Vector2(x, y), new Vector2(center, center));
                 pixels[y * size + x] = dist <= radius ? Color.white : Color.clear;
             }
-        }
 
         tex.SetPixels(pixels);
         tex.Apply();
@@ -363,6 +495,7 @@ public class HoleGenerator : MonoBehaviour
     public Vector2 GetPinPosition() => pinPosition;
     public Vector2 GetGreenCenter() => greenCenterWorld;
     public int GetGreenRadius() => greenRadius;
+    public LocationProfile GetProfile() => profile;
 
     public TerrainType GetTerrainAtWorldPos(Vector2 worldPos)
     {
@@ -419,12 +552,12 @@ public class HoleGenerator : MonoBehaviour
     {
         switch (terrain)
         {
-            case TerrainType.Fairway: return fairwayColor;
+            case TerrainType.Fairway: return activeFairwayColor;
             case TerrainType.Green:   return greenColor;
             case TerrainType.Sand:    return sandColor;
             case TerrainType.Water:   return waterColor;
             case TerrainType.Tee:     return teeColor;
-            default:                  return roughColor;
+            default:                  return activeRoughColor;
         }
     }
 

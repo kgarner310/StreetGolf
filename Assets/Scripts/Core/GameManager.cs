@@ -1,8 +1,13 @@
 using UnityEngine;
 
 /// <summary>
-/// Central game manager. Tracks strokes, game state, and coordinates
-/// between hole generation and ball control.
+/// Central game manager. Coordinates the flow:
+/// 1. Player taps "Generate Hole Near Me"
+/// 2. GPS coords are fetched
+/// 3. OSM Overpass is queried for nearby features
+/// 4. LocationProfile is built (biome, water, bunkers, etc.)
+/// 5. Hole is generated from profile + coord seed
+/// 6. Player plays the hole
 /// </summary>
 public class GameManager : MonoBehaviour
 {
@@ -13,12 +18,15 @@ public class GameManager : MonoBehaviour
     public BallController ballController;
     public UIManager uiManager;
     public CameraController cameraController;
+    public LocationDataFetcher locationFetcher;
 
     [Header("Game State")]
     public int currentStrokes = 0;
     public bool holeComplete = false;
     public bool roundActive = false;
     public int par = 3;
+
+    private Vector2 currentLocation;
 
     void Awake()
     {
@@ -43,25 +51,44 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Called when player taps "Generate Hole Near Me".
+    /// Kicks off async OSM fetch, then generates hole from profile.
     /// </summary>
     public void GenerateHoleNearMe()
     {
         currentStrokes = 0;
         holeComplete = false;
-        roundActive = true;
+        roundActive = false;
         uiManager.UpdateStrokeCount(0);
 
-        Vector2 location = LocationProvider.GetLocation();
-        holeGenerator.GenerateHole(location.x, location.y);
+        currentLocation = LocationProvider.GetLocation();
 
+        // Show loading state while fetching OSM data
+        uiManager.ShowLoadingScreen(currentLocation);
+
+        // Fetch real-world surroundings, then generate
+        locationFetcher.FetchProfile(currentLocation.x, currentLocation.y, OnProfileReady);
+    }
+
+    /// <summary>
+    /// Called when LocationDataFetcher finishes (success or fallback).
+    /// </summary>
+    void OnProfileReady(LocationProfile profile)
+    {
+        // Generate the hole shaped by real surroundings
+        holeGenerator.GenerateHole(currentLocation.x, currentLocation.y, profile);
+
+        // Place ball on tee
         Vector2 teePos = holeGenerator.GetTeePosition();
         ballController.PlaceBall(teePos);
         ballController.SetActive(true);
 
         cameraController.SnapToPosition(teePos);
 
+        roundActive = true;
+
+        // Update UI with biome info
         uiManager.ShowGameScreen();
-        uiManager.UpdateHoleInfo(par, location);
+        uiManager.UpdateHoleInfo(par, currentLocation, profile);
         uiManager.UpdateTerrainDisplay("Tee Box");
     }
 
@@ -82,8 +109,7 @@ public class GameManager : MonoBehaviour
         if (holeComplete) return;
 
         HoleGenerator.TerrainType terrain = holeGenerator.GetTerrainAtWorldPos(position);
-        string terrainName = terrain.ToString();
-        uiManager.UpdateTerrainDisplay(terrainName);
+        uiManager.UpdateTerrainDisplay(terrain.ToString());
     }
 
     public void OnHoleComplete()
@@ -93,7 +119,8 @@ public class GameManager : MonoBehaviour
         ballController.SetActive(false);
 
         string scoreLabel = GetScoreLabel(currentStrokes, par);
-        uiManager.ShowHoleComplete(currentStrokes, par, scoreLabel);
+        LocationProfile profile = holeGenerator.GetProfile();
+        uiManager.ShowHoleComplete(currentStrokes, par, scoreLabel, profile);
     }
 
     string GetScoreLabel(int strokes, int holePar)

@@ -1,263 +1,343 @@
 using UnityEngine;
 
 /// <summary>
-/// Handles ball aiming, power, shot execution, and movement.
-/// The ball moves in 2D (top-down view). No physics engine needed —
-/// we simulate simple deceleration with terrain friction.
+/// Ball aiming (drag-back slingshot), power control, movement, and terrain interaction.
+///
+/// How to play:
+/// 1. Touch/click the ball and drag BACKWARD (away from target)
+/// 2. The aim line shows where the ball will go (opposite of drag)
+/// 3. Drag distance = power
+/// 4. Release to shoot
 /// </summary>
 public class BallController : MonoBehaviour
 {
     [Header("References")]
     public HoleGenerator holeGenerator;
-    public LineRenderer aimLine;
-    public GameObject powerBarFill; // UI element for power meter
 
     [Header("Shot Settings")]
-    public float maxPower = 12f;
-    public float minPower = 1f;
-    public float powerChargeSpeed = 6f; // units per second while holding
+    public float maxPower = 14f;
+    public float dragScale = 0.8f; // world units of drag per unit of power
+    public float maxDragDistance = 5f;
 
     [Header("Ball Movement")]
-    public float baseFriction = 0.97f;       // per-frame multiplier
-    public float roughFriction = 0.92f;       // rough slows faster
-    public float sandFriction = 0.85f;        // sand slows much faster
-    public float greenFriction = 0.95f;       // green is smooth
-    public float waterPenaltyDistance = 1.5f;  // how far back from water edge
-    public float stopThreshold = 0.02f;        // speed below this = stopped
+    public float fairwayFriction = 0.975f;
+    public float roughFriction = 0.940f;
+    public float sandFriction = 0.880f;
+    public float greenFriction = 0.960f;
+    public float stopThreshold = 0.015f;
 
     [Header("Hole Detection")]
-    public float holeRadius = 0.3f;  // distance to pin to count as "in the hole"
-    public float maxHoleSpeed = 3f;  // ball must be slow enough to drop in
+    public float holeRadius = 0.25f;
+    public float maxHoleEntrySpeed = 4f;
 
-    // State
-    private bool aimingEnabled = false;
-    private bool isCharging = false;
+    [Header("Visuals")]
+    public Color ballColor = Color.white;
+    public Color aimLineColor = new Color(1f, 1f, 1f, 0.6f);
+    public Color powerLineColor = new Color(1f, 0.3f, 0.3f, 0.5f);
+
+    // Internal state
+    private bool active = false;
+    private bool isDragging = false;
     private bool ballMoving = false;
-    private float currentPower = 0f;
-    private Vector2 aimDirection = Vector2.up;
-    private Vector2 velocity = Vector2.zero;
-    private bool inWater = false;
+    private Vector2 dragStartWorld;
+    private Vector2 velocity;
     private Vector2 lastSafePosition;
+
+    // Visual components (created at runtime)
+    private SpriteRenderer ballSprite;
+    private LineRenderer aimLine;
+    private LineRenderer powerLine;
+    private SpriteRenderer shadowSprite;
+
+    void Awake()
+    {
+        CreateVisuals();
+    }
 
     void Update()
     {
+        if (!active) return;
+
         if (ballMoving)
         {
-            UpdateBallMovement();
+            UpdateMovement();
             return;
         }
 
-        if (!aimingEnabled) return;
-
-        HandleAiming();
-        HandlePowerCharge();
+        HandleDragInput();
     }
 
-    /// <summary>
-    /// Place the ball at a position (used at tee and after water penalty).
-    /// </summary>
+    // --- Setup ---
+
+    void CreateVisuals()
+    {
+        // Ball sprite
+        ballSprite = gameObject.AddComponent<SpriteRenderer>();
+        ballSprite.sprite = HoleGenerator.CreateCircleSprite();
+        ballSprite.color = ballColor;
+        ballSprite.sortingOrder = 10;
+        transform.localScale = new Vector3(0.22f, 0.22f, 1f);
+
+        // Shadow (slightly offset, slightly larger, dark)
+        GameObject shadow = new GameObject("BallShadow");
+        shadow.transform.SetParent(transform);
+        shadow.transform.localPosition = new Vector3(0.15f, -0.15f, 0.1f);
+        shadow.transform.localScale = Vector3.one * 1.1f;
+        shadowSprite = shadow.AddComponent<SpriteRenderer>();
+        shadowSprite.sprite = HoleGenerator.CreateCircleSprite();
+        shadowSprite.color = new Color(0, 0, 0, 0.3f);
+        shadowSprite.sortingOrder = 9;
+
+        // Aim line (shows shot direction)
+        GameObject aimObj = new GameObject("AimLine");
+        aimObj.transform.SetParent(transform, false);
+        aimLine = aimObj.AddComponent<LineRenderer>();
+        aimLine.positionCount = 2;
+        aimLine.startWidth = 0.04f;
+        aimLine.endWidth = 0.02f;
+        aimLine.material = new Material(Shader.Find("Sprites/Default"));
+        aimLine.startColor = aimLineColor;
+        aimLine.endColor = new Color(aimLineColor.r, aimLineColor.g, aimLineColor.b, 0.1f);
+        aimLine.sortingOrder = 8;
+        aimLine.enabled = false;
+
+        // Power line (shows drag direction)
+        GameObject powObj = new GameObject("PowerLine");
+        powObj.transform.SetParent(transform, false);
+        powerLine = powObj.AddComponent<LineRenderer>();
+        powerLine.positionCount = 2;
+        powerLine.startWidth = 0.03f;
+        powerLine.endWidth = 0.03f;
+        powerLine.material = new Material(Shader.Find("Sprites/Default"));
+        powerLine.startColor = powerLineColor;
+        powerLine.endColor = powerLineColor;
+        powerLine.sortingOrder = 7;
+        powerLine.enabled = false;
+    }
+
     public void PlaceBall(Vector2 position)
     {
-        transform.position = new Vector3(position.x, position.y, -1f); // z=-1 to render above tiles
+        transform.position = new Vector3(position.x, position.y, -1f);
         velocity = Vector2.zero;
         ballMoving = false;
+        isDragging = false;
         lastSafePosition = position;
+        HideLines();
     }
 
-    public void EnableAiming(bool enabled)
+    public void SetActive(bool isActive)
     {
-        aimingEnabled = enabled;
-        if (aimLine != null)
-            aimLine.enabled = enabled;
+        active = isActive;
+        if (!isActive) HideLines();
     }
 
-    void HandleAiming()
+    // --- Input handling (slingshot drag) ---
+
+    void HandleDragInput()
     {
-        // On mobile: use touch position. In editor: use mouse.
-        Vector2 inputPos = Vector2.zero;
-        bool hasInput = false;
+        Vector2 inputScreenPos;
+        bool inputDown = false;
+        bool inputHeld = false;
+        bool inputUp = false;
 
-        if (Input.touchCount > 0 && !isCharging)
+        // Unified touch/mouse input
+        if (Input.touchCount > 0)
         {
-            inputPos = Input.GetTouch(0).position;
-            hasInput = true;
+            Touch touch = Input.GetTouch(0);
+            inputScreenPos = touch.position;
+            inputDown = touch.phase == TouchPhase.Began;
+            inputHeld = touch.phase == TouchPhase.Moved || touch.phase == TouchPhase.Stationary;
+            inputUp = touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled;
         }
-        else if (Input.GetMouseButton(0) && !isCharging)
+        else
         {
-            inputPos = Input.mousePosition;
-            hasInput = true;
+            inputScreenPos = Input.mousePosition;
+            inputDown = Input.GetMouseButtonDown(0);
+            inputHeld = Input.GetMouseButton(0);
+            inputUp = Input.GetMouseButtonUp(0);
         }
 
-        if (hasInput)
+        Vector2 worldPos = Camera.main.ScreenToWorldPoint(inputScreenPos);
+
+        if (inputDown)
         {
-            // Convert screen position to world position
-            Vector3 worldPos = Camera.main.ScreenToWorldPoint(inputPos);
-            worldPos.z = 0;
-
-            // Direction from ball to touch point
-            Vector2 ballPos = transform.position;
-            Vector2 dir = ((Vector2)worldPos - ballPos).normalized;
-
-            if (dir.sqrMagnitude > 0.01f)
+            // Check if touch is near the ball (within 1 unit)
+            float distToBall = Vector2.Distance(worldPos, (Vector2)transform.position);
+            if (distToBall < 1.5f)
             {
-                aimDirection = dir;
-                UpdateAimLine();
+                isDragging = true;
+                dragStartWorld = (Vector2)transform.position;
             }
         }
-    }
 
-    void HandlePowerCharge()
-    {
-        // Tap and hold to charge power, release to shoot
-        bool pressing = Input.GetMouseButton(0) || Input.touchCount > 0;
-        bool justPressed = Input.GetMouseButtonDown(0) ||
-                           (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began);
-        bool justReleased = Input.GetMouseButtonUp(0) ||
-                            (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Ended);
-
-        // Start charging on second tap (first tap aims)
-        if (justPressed && !isCharging)
+        if (isDragging && inputHeld)
         {
-            isCharging = true;
-            currentPower = minPower;
+            UpdateDragVisuals(worldPos);
         }
 
-        if (isCharging && pressing)
+        if (isDragging && inputUp)
         {
-            currentPower += powerChargeSpeed * Time.deltaTime;
-            currentPower = Mathf.Clamp(currentPower, minPower, maxPower);
-            UpdatePowerBar(currentPower / maxPower);
-        }
-
-        if (isCharging && justReleased)
-        {
-            ExecuteShot();
+            ExecuteShot(worldPos);
+            isDragging = false;
         }
     }
 
-    void ExecuteShot()
+    void UpdateDragVisuals(Vector2 currentWorld)
     {
-        isCharging = false;
+        Vector2 ballPos = transform.position;
+        Vector2 dragDelta = currentWorld - ballPos;
+
+        // Clamp drag distance
+        float dragDist = Mathf.Min(dragDelta.magnitude, maxDragDistance);
+        if (dragDist < 0.1f)
+        {
+            HideLines();
+            return;
+        }
+
+        Vector2 dragDir = dragDelta.normalized;
+        Vector2 shotDir = -dragDir; // Slingshot: shot goes opposite of drag
+
+        float power = (dragDist / maxDragDistance) * maxPower;
+
+        // Aim line: from ball in shot direction, length proportional to power
+        float aimLength = (power / maxPower) * 4f;
+        Vector3 aimStart = new Vector3(ballPos.x, ballPos.y, -0.5f);
+        Vector3 aimEnd = new Vector3(
+            ballPos.x + shotDir.x * aimLength,
+            ballPos.y + shotDir.y * aimLength,
+            -0.5f
+        );
+
+        aimLine.enabled = true;
+        aimLine.SetPosition(0, aimStart);
+        aimLine.SetPosition(1, aimEnd);
+
+        // Power line: from ball to drag point
+        Vector3 powStart = new Vector3(ballPos.x, ballPos.y, -0.5f);
+        Vector3 powEnd = new Vector3(
+            ballPos.x + dragDir.x * dragDist,
+            ballPos.y + dragDir.y * dragDist,
+            -0.5f
+        );
+
+        powerLine.enabled = true;
+        powerLine.SetPosition(0, powStart);
+        powerLine.SetPosition(1, powEnd);
+
+        // Color power line by power level
+        Color powColor = Color.Lerp(
+            new Color(0.5f, 1f, 0.5f, 0.5f),  // green = low power
+            new Color(1f, 0.2f, 0.2f, 0.5f),   // red = max power
+            power / maxPower
+        );
+        powerLine.startColor = powColor;
+        powerLine.endColor = powColor;
+    }
+
+    void ExecuteShot(Vector2 releaseWorld)
+    {
+        Vector2 ballPos = transform.position;
+        Vector2 dragDelta = releaseWorld - ballPos;
+
+        float dragDist = Mathf.Min(dragDelta.magnitude, maxDragDistance);
+        if (dragDist < 0.2f)
+        {
+            // Too short — cancel shot
+            HideLines();
+            return;
+        }
+
+        Vector2 shotDir = -dragDelta.normalized;
+        float power = (dragDist / maxDragDistance) * maxPower;
+
+        velocity = shotDir * power;
         ballMoving = true;
-        aimingEnabled = false;
+        HideLines();
 
-        if (aimLine != null)
-            aimLine.enabled = false;
-
-        velocity = aimDirection * currentPower;
-        currentPower = 0f;
-        UpdatePowerBar(0f);
-
-        // Track the stroke
         GameManager.Instance.OnShotTaken();
-
-        Debug.Log($"Shot! Direction={aimDirection}, Power={velocity.magnitude}");
     }
 
-    void UpdateBallMovement()
+    // --- Ball movement ---
+
+    void UpdateMovement()
     {
         Vector2 pos = transform.position;
 
-        // Get terrain at current position
         HoleGenerator.TerrainType terrain = holeGenerator.GetTerrainAtWorldPos(pos);
 
-        // Apply terrain-specific friction
-        float friction = baseFriction;
-        switch (terrain)
+        // Water hazard
+        if (terrain == HoleGenerator.TerrainType.Water)
         {
-            case HoleGenerator.TerrainType.Rough:   friction = roughFriction; break;
-            case HoleGenerator.TerrainType.Sand:     friction = sandFriction; break;
-            case HoleGenerator.TerrainType.Green:    friction = greenFriction; break;
-            case HoleGenerator.TerrainType.Fairway:  friction = baseFriction; break;
-            case HoleGenerator.TerrainType.Water:
-                HandleWaterHazard();
-                return;
-        }
-
-        velocity *= friction;
-
-        // Move ball
-        pos += velocity * Time.deltaTime * 60f; // 60fps normalized
-        transform.position = new Vector3(pos.x, pos.y, -1f);
-
-        // Remember last safe (non-water) position
-        if (terrain != HoleGenerator.TerrainType.Water)
-        {
-            lastSafePosition = pos;
-        }
-
-        // Check if ball is in the hole
-        float distToPin = Vector2.Distance(pos, holeGenerator.GetPinPosition());
-        if (distToPin < holeRadius && velocity.magnitude < maxHoleSpeed)
-        {
-            BallInHole();
+            HandleWater();
             return;
         }
 
-        // Check if ball stopped
+        // Apply friction
+        float friction = GetFriction(terrain);
+        velocity *= friction;
+
+        // Move
+        pos += velocity * Time.deltaTime * 60f;
+        transform.position = new Vector3(pos.x, pos.y, -1f);
+
+        // Track safe position
+        lastSafePosition = pos;
+
+        // Check hole
+        Vector2 pinPos = holeGenerator.GetPinPosition();
+        float distToPin = Vector2.Distance(pos, pinPos);
+        if (distToPin < holeRadius && velocity.magnitude < maxHoleEntrySpeed)
+        {
+            BallInHole(pinPos);
+            return;
+        }
+
+        // Check stopped
         if (velocity.magnitude < stopThreshold)
         {
             velocity = Vector2.zero;
             ballMoving = false;
-
-            // Re-enable aiming for next shot
-            if (!GameManager.Instance.holeComplete)
-            {
-                EnableAiming(true);
-            }
+            GameManager.Instance.OnBallStopped(pos);
         }
     }
 
-    void HandleWaterHazard()
+    float GetFriction(HoleGenerator.TerrainType terrain)
     {
-        // Ball in water — penalty stroke + place back at last safe position
+        switch (terrain)
+        {
+            case HoleGenerator.TerrainType.Fairway: return fairwayFriction;
+            case HoleGenerator.TerrainType.Rough:   return roughFriction;
+            case HoleGenerator.TerrainType.Sand:    return sandFriction;
+            case HoleGenerator.TerrainType.Green:   return greenFriction;
+            case HoleGenerator.TerrainType.Tee:     return fairwayFriction;
+            default:                                return roughFriction;
+        }
+    }
+
+    void HandleWater()
+    {
         velocity = Vector2.zero;
         ballMoving = false;
 
-        GameManager.Instance.OnShotTaken(); // penalty stroke
+        GameManager.Instance.AddPenaltyStroke();
+        GameManager.Instance.uiManager.ShowWaterPenalty();
 
         PlaceBall(lastSafePosition);
-        EnableAiming(true);
-
-        Debug.Log("Ball in water! Penalty stroke added.");
-
-        // Notify UI
-        if (GameManager.Instance.uiManager != null)
-        {
-            GameManager.Instance.uiManager.ShowWaterPenalty();
-        }
     }
 
-    void BallInHole()
+    void BallInHole(Vector2 pinPos)
     {
         velocity = Vector2.zero;
         ballMoving = false;
-
-        // Snap ball to pin position
-        Vector2 pinPos = holeGenerator.GetPinPosition();
         transform.position = new Vector3(pinPos.x, pinPos.y, -1f);
 
         GameManager.Instance.OnHoleComplete();
-        Debug.Log("Ball in the hole!");
     }
 
-    void UpdateAimLine()
+    void HideLines()
     {
-        if (aimLine == null) return;
-
-        aimLine.enabled = true;
-        Vector3 start = transform.position;
-        Vector3 end = start + (Vector3)(aimDirection * 2f); // 2 unit aim line
-
-        aimLine.SetPosition(0, new Vector3(start.x, start.y, -0.5f));
-        aimLine.SetPosition(1, new Vector3(end.x, end.y, -0.5f));
-    }
-
-    void UpdatePowerBar(float fillPercent)
-    {
-        if (powerBarFill != null)
-        {
-            powerBarFill.transform.localScale = new Vector3(fillPercent, 1f, 1f);
-        }
+        if (aimLine != null) aimLine.enabled = false;
+        if (powerLine != null) powerLine.enabled = false;
     }
 }

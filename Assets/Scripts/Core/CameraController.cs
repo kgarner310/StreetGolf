@@ -1,29 +1,30 @@
 using UnityEngine;
 
 /// <summary>
-/// Top-down camera that follows the ball with smooth movement.
-/// Zooms out slightly when ball is moving fast.
+/// Top-down orthographic camera that follows the ball smoothly.
 /// </summary>
 public class CameraController : MonoBehaviour
 {
     [Header("Target")]
     public Transform ballTransform;
 
-    [Header("Camera Settings")]
+    [Header("Settings")]
     public float followSpeed = 5f;
-    public float defaultZoom = 8f;    // orthographic size
-    public float zoomedOutSize = 12f; // when ball is moving
-    public float zoomSpeed = 2f;
+    public float defaultZoom = 8f;
+    public float overviewZoom = 14f;
+    public float zoomSpeed = 3f;
 
     private Camera cam;
+    private bool showOverview = false;
+    private float targetZoom;
 
     void Start()
     {
         cam = GetComponent<Camera>();
+        if (cam == null) cam = Camera.main;
         cam.orthographic = true;
         cam.orthographicSize = defaultZoom;
-
-        // Ensure camera looks down (top-down 2D)
+        targetZoom = defaultZoom;
         transform.position = new Vector3(0, 0, -10);
     }
 
@@ -37,17 +38,25 @@ public class CameraController : MonoBehaviour
             ballTransform.position.y,
             -10f
         );
-
         transform.position = Vector3.Lerp(transform.position, target, followSpeed * Time.deltaTime);
 
-        // Dynamic zoom based on ball velocity
-        BallController ball = ballTransform.GetComponent<BallController>();
-        float targetZoom = defaultZoom;
-
-        // We can't directly read velocity from BallController (it's private),
-        // so we'll just use the default zoom for now.
-        // Future enhancement: expose a speed property on BallController.
-
+        // Smooth zoom
         cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, targetZoom, zoomSpeed * Time.deltaTime);
+    }
+
+    public void SnapToPosition(Vector2 pos)
+    {
+        transform.position = new Vector3(pos.x, pos.y, -10f);
+    }
+
+    public void SetOverviewMode(bool overview)
+    {
+        showOverview = overview;
+        targetZoom = overview ? overviewZoom : defaultZoom;
+    }
+
+    public void SetZoom(float zoom)
+    {
+        targetZoom = zoom;
     }
 }

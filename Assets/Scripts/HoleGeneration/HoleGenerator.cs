@@ -2,40 +2,42 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// Generates a par-3 golf hole from a lat/lon seed.
+/// Generates a top-down par-3 golf hole from a lat/lon seed.
 /// Same coordinates always produce the same hole.
-///
-/// The hole is built on a grid of tiles, rendered top-down.
-/// Terrain types: Rough, Fairway, Green, Sand, Water, Tee.
+/// Grid-based terrain: Rough, Fairway, Green, Sand, Water, Tee.
 /// </summary>
 public class HoleGenerator : MonoBehaviour
 {
     [Header("Grid Settings")]
-    public int gridWidth = 20;   // tiles wide
-    public int gridHeight = 40;  // tiles tall (hole is vertical)
+    public int gridWidth = 24;
+    public int gridHeight = 44;
     public float tileSize = 0.5f;
 
-    [Header("Tile Prefab")]
-    public GameObject tilePrefab; // A simple quad with SpriteRenderer
-
-    [Header("Hole Pin")]
-    public GameObject pinPrefab;  // Flag/pin marker on the green
-
     [Header("Terrain Colors")]
-    public Color roughColor = new Color(0.18f, 0.42f, 0.14f);    // dark green
-    public Color fairwayColor = new Color(0.30f, 0.65f, 0.25f);  // medium green
-    public Color greenColor = new Color(0.45f, 0.80f, 0.35f);    // light green
-    public Color sandColor = new Color(0.92f, 0.85f, 0.60f);     // tan
-    public Color waterColor = new Color(0.20f, 0.45f, 0.75f);    // blue
-    public Color teeColor = new Color(0.55f, 0.75f, 0.50f);      // pale green
+    public Color roughColor = new Color(0.15f, 0.38f, 0.12f);
+    public Color fairwayColor = new Color(0.28f, 0.62f, 0.22f);
+    public Color greenColor = new Color(0.42f, 0.78f, 0.32f);
+    public Color sandColor = new Color(0.93f, 0.86f, 0.58f);
+    public Color waterColor = new Color(0.18f, 0.42f, 0.72f);
+    public Color teeColor = new Color(0.50f, 0.72f, 0.45f);
+    public Color holeColor = new Color(0.08f, 0.08f, 0.08f);
 
     // Internal state
     private TerrainType[,] terrainGrid;
-    private GameObject[,] tileObjects;
+    private SpriteRenderer[,] tileRenderers;
     private Vector2 teePosition;
-    private Vector2 greenCenter;
+    private Vector2 greenCenterWorld;
+    private Vector2Int greenCenterGrid;
     private Vector2 pinPosition;
-    private System.Random seededRandom;
+    private int greenRadius;
+    private System.Random rng;
+
+    // Cached tile parent
+    private Transform tileParent;
+
+    // Pin visual
+    private GameObject pinObject;
+    private GameObject holeRingObject;
 
     public enum TerrainType
     {
@@ -48,122 +50,99 @@ public class HoleGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// Main entry point. Generates a hole from GPS coordinates used as seed.
+    /// Main entry point. Clears previous hole and generates a new one.
     /// </summary>
     public void GenerateHole(float latitude, float longitude)
     {
-        // Clear any previous hole
         ClearHole();
 
-        // Create deterministic seed from coordinates
-        // Multiply by large primes and combine for good distribution
         int seed = HashCoordinates(latitude, longitude);
-        seededRandom = new System.Random(seed);
+        rng = new System.Random(seed);
 
-        // Initialize grid with rough (background terrain)
         terrainGrid = new TerrainType[gridWidth, gridHeight];
-        for (int x = 0; x < gridWidth; x++)
-            for (int y = 0; y < gridHeight; y++)
-                terrainGrid[x, y] = TerrainType.Rough;
+        FillGrid(TerrainType.Rough);
 
-        // Step 1: Place tee box at bottom center
         PlaceTee();
-
-        // Step 2: Place green at top (with some random offset)
         PlaceGreen();
-
-        // Step 3: Draw fairway connecting tee to green
         DrawFairway();
-
-        // Step 4: Add sand bunkers near the green
         PlaceBunkers();
-
-        // Step 5: Add a water hazard (sometimes)
         PlaceWater();
-
-        // Step 6: Render all tiles
         RenderGrid();
+        CreatePinVisual();
 
-        // Step 7: Place the pin/flag on the green
-        PlacePin();
-
-        Debug.Log($"Hole generated with seed {seed} (lat={latitude}, lon={longitude})");
+        Debug.Log($"Hole generated | seed={seed} | lat={latitude:F4} lon={longitude:F4}");
     }
 
-    int HashCoordinates(float lat, float lon)
-    {
-        // Convert to fixed-point integers (4 decimal places = ~11m resolution)
-        int latInt = Mathf.RoundToInt(lat * 10000);
-        int lonInt = Mathf.RoundToInt(lon * 10000);
+    // --- Terrain placement ---
 
-        // Simple hash combining
-        int hash = 17;
-        hash = hash * 31 + latInt;
-        hash = hash * 31 + lonInt;
-        return hash;
+    void FillGrid(TerrainType type)
+    {
+        for (int x = 0; x < gridWidth; x++)
+            for (int y = 0; y < gridHeight; y++)
+                terrainGrid[x, y] = type;
     }
 
     void PlaceTee()
     {
-        // Tee is at bottom center, 2 tiles wide x 2 tiles tall
-        int teeX = gridWidth / 2 - 1;
-        int teeY = 2;
+        int cx = gridWidth / 2;
+        int cy = 3;
 
-        for (int x = teeX; x < teeX + 2; x++)
-            for (int y = teeY; y < teeY + 2; y++)
-                terrainGrid[x, y] = TerrainType.Tee;
+        // 3x2 tee box
+        for (int x = cx - 1; x <= cx + 1; x++)
+            for (int y = cy; y <= cy + 1; y++)
+                if (InBounds(x, y))
+                    terrainGrid[x, y] = TerrainType.Tee;
 
-        teePosition = GridToWorld(teeX, teeY + 1);
+        teePosition = GridToWorld(cx, cy);
     }
 
     void PlaceGreen()
     {
-        // Green is near the top, with random X offset
-        int greenRadius = 3 + seededRandom.Next(2); // radius 3-4 tiles
-        int greenCenterX = gridWidth / 2 + seededRandom.Next(-3, 4);
-        int greenCenterY = gridHeight - greenRadius - 3 - seededRandom.Next(3);
+        greenRadius = 3 + rng.Next(2); // 3-4
 
-        // Clamp to keep green on grid
-        greenCenterX = Mathf.Clamp(greenCenterX, greenRadius + 1, gridWidth - greenRadius - 1);
-        greenCenterY = Mathf.Clamp(greenCenterY, gridHeight / 2, gridHeight - greenRadius - 2);
+        int cx = gridWidth / 2 + rng.Next(-3, 4);
+        int cy = gridHeight - greenRadius - 4 - rng.Next(4);
 
-        // Draw circular green
+        cx = Mathf.Clamp(cx, greenRadius + 1, gridWidth - greenRadius - 1);
+        cy = Mathf.Clamp(cy, gridHeight / 2, gridHeight - greenRadius - 2);
+
+        greenCenterGrid = new Vector2Int(cx, cy);
+        greenCenterWorld = GridToWorld(cx, cy);
+
+        // Slightly elliptical green for variety
+        float stretchX = 0.8f + (float)rng.NextDouble() * 0.4f;
+        float stretchY = 0.8f + (float)rng.NextDouble() * 0.4f;
+
         for (int x = 0; x < gridWidth; x++)
         {
             for (int y = 0; y < gridHeight; y++)
             {
-                float dist = Vector2.Distance(
-                    new Vector2(x, y),
-                    new Vector2(greenCenterX, greenCenterY)
-                );
-                if (dist <= greenRadius)
-                {
+                float dx = (x - cx) / (greenRadius * stretchX);
+                float dy = (y - cy) / (greenRadius * stretchY);
+                if (dx * dx + dy * dy <= 1f)
                     terrainGrid[x, y] = TerrainType.Green;
-                }
             }
         }
 
-        greenCenter = new Vector2(greenCenterX, greenCenterY);
-
-        // Pin position: offset from green center
-        float pinOffsetX = (float)(seededRandom.NextDouble() * 2 - 1) * (greenRadius * 0.5f);
-        float pinOffsetY = (float)(seededRandom.NextDouble() * 2 - 1) * (greenRadius * 0.5f);
-        pinPosition = GridToWorld(
-            greenCenterX + Mathf.RoundToInt(pinOffsetX),
-            greenCenterY + Mathf.RoundToInt(pinOffsetY)
-        );
+        // Pin: random offset within green
+        float pinOX = (float)(rng.NextDouble() * 2 - 1) * (greenRadius * 0.4f);
+        float pinOY = (float)(rng.NextDouble() * 2 - 1) * (greenRadius * 0.4f);
+        int pinGX = cx + Mathf.RoundToInt(pinOX);
+        int pinGY = cy + Mathf.RoundToInt(pinOY);
+        pinPosition = GridToWorld(pinGX, pinGY);
     }
 
     void DrawFairway()
     {
-        // Draw a fairway path from tee to green using a wobbling line
-        Vector2 start = new Vector2(gridWidth / 2, 4);
-        Vector2 end = greenCenter;
+        Vector2 start = new Vector2(gridWidth / 2f, 5);
+        Vector2 end = new Vector2(greenCenterGrid.x, greenCenterGrid.y);
 
-        int fairwayWidth = 2 + seededRandom.Next(2); // 2-3 tiles wide on each side
-        int steps = 40;
+        int width = 2 + rng.Next(2); // 2-3 tiles each side
+        int steps = 50;
 
-        float wobbleAmount = 1.5f + (float)seededRandom.NextDouble() * 2f;
+        // Pick a random wobble pattern
+        float wobbleAmp = 1.5f + (float)rng.NextDouble() * 2f;
+        float wobbleFreq = 1.5f + (float)rng.NextDouble() * 1.5f;
 
         for (int i = 0; i <= steps; i++)
         {
@@ -171,104 +150,102 @@ public class HoleGenerator : MonoBehaviour
             float baseX = Mathf.Lerp(start.x, end.x, t);
             float baseY = Mathf.Lerp(start.y, end.y, t);
 
-            // Add sinusoidal wobble for natural shape
-            float wobbleFreq = 2f + (float)seededRandom.NextDouble();
-            float wobble = Mathf.Sin(t * wobbleFreq * Mathf.PI) * wobbleAmount;
-            float centerX = baseX + wobble;
+            // Sinusoidal wobble
+            float wobble = Mathf.Sin(t * wobbleFreq * Mathf.PI) * wobbleAmp;
 
-            // Paint fairway tiles around the center line
-            for (int dx = -fairwayWidth; dx <= fairwayWidth; dx++)
+            // Taper fairway: wider in middle, narrower at tee and green
+            float taper = Mathf.Sin(t * Mathf.PI);
+            int currentWidth = Mathf.RoundToInt(width * (0.6f + 0.4f * taper));
+
+            for (int dx = -currentWidth; dx <= currentWidth; dx++)
             {
-                int tileX = Mathf.RoundToInt(centerX + dx);
-                int tileY = Mathf.RoundToInt(baseY);
+                int tx = Mathf.RoundToInt(baseX + wobble + dx);
+                int ty = Mathf.RoundToInt(baseY);
 
-                if (tileX >= 0 && tileX < gridWidth && tileY >= 0 && tileY < gridHeight)
-                {
-                    // Don't overwrite green or tee
-                    if (terrainGrid[tileX, tileY] == TerrainType.Rough)
-                    {
-                        terrainGrid[tileX, tileY] = TerrainType.Fairway;
-                    }
-                }
+                if (InBounds(tx, ty) && terrainGrid[tx, ty] == TerrainType.Rough)
+                    terrainGrid[tx, ty] = TerrainType.Fairway;
             }
         }
     }
 
     void PlaceBunkers()
     {
-        // Place 1-3 bunkers near the green
-        int bunkerCount = 1 + seededRandom.Next(3);
+        int count = 1 + rng.Next(3); // 1-3
 
-        for (int b = 0; b < bunkerCount; b++)
+        for (int b = 0; b < count; b++)
         {
-            // Bunker near green, offset to a side
-            float angle = (float)seededRandom.NextDouble() * Mathf.PI * 2;
-            float dist = 4f + (float)seededRandom.NextDouble() * 2f;
+            float angle = (float)rng.NextDouble() * Mathf.PI * 2f;
+            float dist = greenRadius + 1.5f + (float)rng.NextDouble() * 2.5f;
 
-            int bx = Mathf.RoundToInt(greenCenter.x + Mathf.Cos(angle) * dist);
-            int by = Mathf.RoundToInt(greenCenter.y + Mathf.Sin(angle) * dist);
+            int bx = Mathf.RoundToInt(greenCenterGrid.x + Mathf.Cos(angle) * dist);
+            int by = Mathf.RoundToInt(greenCenterGrid.y + Mathf.Sin(angle) * dist);
+            int radius = 1 + rng.Next(2);
 
-            int bunkerRadius = 1 + seededRandom.Next(2);
+            PaintCircle(bx, by, radius, TerrainType.Sand, true);
+        }
 
-            for (int x = bx - bunkerRadius; x <= bx + bunkerRadius; x++)
-            {
-                for (int y = by - bunkerRadius; y <= by + bunkerRadius; y++)
-                {
-                    if (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight)
-                    {
-                        float d = Vector2.Distance(new Vector2(x, y), new Vector2(bx, by));
-                        if (d <= bunkerRadius &&
-                            terrainGrid[x, y] != TerrainType.Green &&
-                            terrainGrid[x, y] != TerrainType.Tee)
-                        {
-                            terrainGrid[x, y] = TerrainType.Sand;
-                        }
-                    }
-                }
-            }
+        // Occasional fairway bunker (30% chance)
+        if (rng.NextDouble() < 0.3)
+        {
+            int fbx = gridWidth / 2 + (rng.Next(2) == 0 ? -4 : 4) + rng.Next(-1, 2);
+            int fby = gridHeight / 3 + rng.Next(4);
+            PaintCircle(fbx, fby, 1 + rng.Next(1), TerrainType.Sand, true);
         }
     }
 
     void PlaceWater()
     {
-        // 50% chance of a water hazard
-        if (seededRandom.NextDouble() < 0.5) return;
+        // 50% chance of water
+        if (rng.NextDouble() < 0.5) return;
 
-        // Water on one side of the fairway, midway up
-        int side = seededRandom.Next(2) == 0 ? -1 : 1;
-        int waterCenterX = gridWidth / 2 + side * (4 + seededRandom.Next(3));
-        int waterCenterY = gridHeight / 3 + seededRandom.Next(gridHeight / 4);
+        int side = rng.Next(2) == 0 ? -1 : 1;
+        int wx = gridWidth / 2 + side * (4 + rng.Next(3));
+        int wy = gridHeight / 3 + rng.Next(gridHeight / 4);
 
-        int waterRadiusX = 2 + seededRandom.Next(2);
-        int waterRadiusY = 2 + seededRandom.Next(3);
+        int rx = 2 + rng.Next(2);
+        int ry = 2 + rng.Next(3);
 
-        for (int x = waterCenterX - waterRadiusX; x <= waterCenterX + waterRadiusX; x++)
+        for (int x = wx - rx; x <= wx + rx; x++)
         {
-            for (int y = waterCenterY - waterRadiusY; y <= waterCenterY + waterRadiusY; y++)
+            for (int y = wy - ry; y <= wy + ry; y++)
             {
-                if (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight)
+                if (!InBounds(x, y)) continue;
+                float dx = (float)(x - wx) / rx;
+                float dy = (float)(y - wy) / ry;
+                if (dx * dx + dy * dy <= 1f)
                 {
-                    // Elliptical shape
-                    float dx = (float)(x - waterCenterX) / waterRadiusX;
-                    float dy = (float)(y - waterCenterY) / waterRadiusY;
-                    if (dx * dx + dy * dy <= 1f)
-                    {
-                        if (terrainGrid[x, y] != TerrainType.Green &&
-                            terrainGrid[x, y] != TerrainType.Tee)
-                        {
-                            terrainGrid[x, y] = TerrainType.Water;
-                        }
-                    }
+                    if (terrainGrid[x, y] != TerrainType.Green && terrainGrid[x, y] != TerrainType.Tee)
+                        terrainGrid[x, y] = TerrainType.Water;
                 }
             }
         }
     }
 
+    void PaintCircle(int cx, int cy, int radius, TerrainType type, bool skipProtected)
+    {
+        for (int x = cx - radius; x <= cx + radius; x++)
+        {
+            for (int y = cy - radius; y <= cy + radius; y++)
+            {
+                if (!InBounds(x, y)) continue;
+                float d = Vector2.Distance(new Vector2(x, y), new Vector2(cx, cy));
+                if (d > radius) continue;
+                if (skipProtected && (terrainGrid[x, y] == TerrainType.Green || terrainGrid[x, y] == TerrainType.Tee))
+                    continue;
+                terrainGrid[x, y] = type;
+            }
+        }
+    }
+
+    // --- Rendering ---
+
     void RenderGrid()
     {
-        tileObjects = new GameObject[gridWidth, gridHeight];
+        tileParent = new GameObject("Tiles").transform;
+        tileParent.SetParent(transform);
 
-        // Calculate offset so the grid is centered at (0,0)
+        tileRenderers = new SpriteRenderer[gridWidth, gridHeight];
+
         float offsetX = -(gridWidth * tileSize) / 2f;
         float offsetY = -(gridHeight * tileSize) / 2f;
 
@@ -282,27 +259,160 @@ public class HoleGenerator : MonoBehaviour
                     0f
                 );
 
-                GameObject tile = Instantiate(tilePrefab, pos, Quaternion.identity, transform);
-                tile.name = $"Tile_{x}_{y}";
+                GameObject tile = new GameObject($"T_{x}_{y}");
+                tile.transform.position = pos;
+                tile.transform.SetParent(tileParent);
 
-                SpriteRenderer sr = tile.GetComponent<SpriteRenderer>();
-                if (sr != null)
-                {
-                    sr.color = GetTerrainColor(terrainGrid[x, y]);
-                }
+                SpriteRenderer sr = tile.AddComponent<SpriteRenderer>();
+                sr.sprite = CreateSquareSprite();
+                sr.color = GetTerrainColor(terrainGrid[x, y]);
+                sr.sortingOrder = 0;
 
-                tileObjects[x, y] = tile;
+                // Scale sprite to tile size with tiny gap for grid effect
+                float scale = tileSize * 0.96f;
+                tile.transform.localScale = new Vector3(scale, scale, 1f);
+
+                tileRenderers[x, y] = sr;
             }
         }
     }
 
-    void PlacePin()
+    void CreatePinVisual()
     {
-        if (pinPrefab != null)
+        // Hole (dark circle)
+        holeRingObject = new GameObject("HoleRing");
+        holeRingObject.transform.position = new Vector3(pinPosition.x, pinPosition.y, -0.3f);
+        holeRingObject.transform.SetParent(transform);
+        SpriteRenderer holeSR = holeRingObject.AddComponent<SpriteRenderer>();
+        holeSR.sprite = CreateCircleSprite();
+        holeSR.color = holeColor;
+        holeSR.sortingOrder = 1;
+        holeRingObject.transform.localScale = new Vector3(0.3f, 0.3f, 1f);
+
+        // Pin flag (small red square above hole)
+        pinObject = new GameObject("Pin");
+        pinObject.transform.position = new Vector3(pinPosition.x + 0.08f, pinPosition.y + 0.2f, -0.4f);
+        pinObject.transform.SetParent(transform);
+        SpriteRenderer pinSR = pinObject.AddComponent<SpriteRenderer>();
+        pinSR.sprite = CreateSquareSprite();
+        pinSR.color = Color.red;
+        pinSR.sortingOrder = 2;
+        pinObject.transform.localScale = new Vector3(0.15f, 0.12f, 1f);
+
+        // Flagpole (thin white line)
+        GameObject pole = new GameObject("Pole");
+        pole.transform.position = new Vector3(pinPosition.x, pinPosition.y + 0.1f, -0.35f);
+        pole.transform.SetParent(transform);
+        SpriteRenderer poleSR = pole.AddComponent<SpriteRenderer>();
+        poleSR.sprite = CreateSquareSprite();
+        poleSR.color = Color.white;
+        poleSR.sortingOrder = 2;
+        pole.transform.localScale = new Vector3(0.02f, 0.25f, 1f);
+    }
+
+    // --- Sprite creation (runtime, no asset files needed) ---
+
+    private static Sprite cachedSquareSprite;
+    private static Sprite cachedCircleSprite;
+
+    public static Sprite CreateSquareSprite()
+    {
+        if (cachedSquareSprite != null) return cachedSquareSprite;
+
+        Texture2D tex = new Texture2D(4, 4);
+        Color[] pixels = new Color[16];
+        for (int i = 0; i < 16; i++) pixels[i] = Color.white;
+        tex.SetPixels(pixels);
+        tex.Apply();
+        tex.filterMode = FilterMode.Point;
+
+        cachedSquareSprite = Sprite.Create(tex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f), 4f);
+        return cachedSquareSprite;
+    }
+
+    public static Sprite CreateCircleSprite()
+    {
+        if (cachedCircleSprite != null) return cachedCircleSprite;
+
+        int size = 32;
+        Texture2D tex = new Texture2D(size, size);
+        Color[] pixels = new Color[size * size];
+        float center = size / 2f;
+        float radius = size / 2f;
+
+        for (int y = 0; y < size; y++)
         {
-            Instantiate(pinPrefab, new Vector3(pinPosition.x, pinPosition.y, -0.5f),
-                        Quaternion.identity, transform);
+            for (int x = 0; x < size; x++)
+            {
+                float dist = Vector2.Distance(new Vector2(x, y), new Vector2(center, center));
+                pixels[y * size + x] = dist <= radius ? Color.white : Color.clear;
+            }
         }
+
+        tex.SetPixels(pixels);
+        tex.Apply();
+        tex.filterMode = FilterMode.Bilinear;
+
+        cachedCircleSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), (float)size);
+        return cachedCircleSprite;
+    }
+
+    // --- Public getters ---
+
+    public Vector2 GetTeePosition() => teePosition;
+    public Vector2 GetPinPosition() => pinPosition;
+    public Vector2 GetGreenCenter() => greenCenterWorld;
+    public int GetGreenRadius() => greenRadius;
+
+    public TerrainType GetTerrainAtWorldPos(Vector2 worldPos)
+    {
+        float offsetX = -(gridWidth * tileSize) / 2f;
+        float offsetY = -(gridHeight * tileSize) / 2f;
+
+        int gx = Mathf.FloorToInt((worldPos.x - offsetX) / tileSize);
+        int gy = Mathf.FloorToInt((worldPos.y - offsetY) / tileSize);
+
+        if (InBounds(gx, gy))
+            return terrainGrid[gx, gy];
+
+        return TerrainType.Rough;
+    }
+
+    public bool IsOnCourse(Vector2 worldPos)
+    {
+        float offsetX = -(gridWidth * tileSize) / 2f;
+        float offsetY = -(gridHeight * tileSize) / 2f;
+
+        int gx = Mathf.FloorToInt((worldPos.x - offsetX) / tileSize);
+        int gy = Mathf.FloorToInt((worldPos.y - offsetY) / tileSize);
+        return InBounds(gx, gy);
+    }
+
+    // --- Helpers ---
+
+    Vector2 GridToWorld(int gx, int gy)
+    {
+        float offsetX = -(gridWidth * tileSize) / 2f;
+        float offsetY = -(gridHeight * tileSize) / 2f;
+        return new Vector2(
+            offsetX + gx * tileSize + tileSize / 2f,
+            offsetY + gy * tileSize + tileSize / 2f
+        );
+    }
+
+    bool InBounds(int x, int y)
+    {
+        return x >= 0 && x < gridWidth && y >= 0 && y < gridHeight;
+    }
+
+    int HashCoordinates(float lat, float lon)
+    {
+        int latInt = Mathf.RoundToInt(lat * 10000);
+        int lonInt = Mathf.RoundToInt(lon * 10000);
+        int hash = 17;
+        hash = hash * 31 + latInt;
+        hash = hash * 31 + lonInt;
+        return hash;
     }
 
     Color GetTerrainColor(TerrainType terrain)
@@ -318,46 +428,14 @@ public class HoleGenerator : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Convert grid coordinates to world position.
-    /// </summary>
-    public Vector2 GridToWorld(int gridX, int gridY)
-    {
-        float offsetX = -(gridWidth * tileSize) / 2f;
-        float offsetY = -(gridHeight * tileSize) / 2f;
-        return new Vector2(
-            offsetX + gridX * tileSize + tileSize / 2f,
-            offsetY + gridY * tileSize + tileSize / 2f
-        );
-    }
-
-    public Vector2 GetTeePosition() => teePosition;
-    public Vector2 GetPinPosition() => pinPosition;
-
-    /// <summary>
-    /// Returns the terrain type at a world position.
-    /// Used by ball controller for lie detection.
-    /// </summary>
-    public TerrainType GetTerrainAtWorldPos(Vector2 worldPos)
-    {
-        float offsetX = -(gridWidth * tileSize) / 2f;
-        float offsetY = -(gridHeight * tileSize) / 2f;
-
-        int gx = Mathf.FloorToInt((worldPos.x - offsetX) / tileSize);
-        int gy = Mathf.FloorToInt((worldPos.y - offsetY) / tileSize);
-
-        if (gx >= 0 && gx < gridWidth && gy >= 0 && gy < gridHeight)
-            return terrainGrid[gx, gy];
-
-        return TerrainType.Rough; // off-grid = rough
-    }
-
     void ClearHole()
     {
-        // Destroy all child objects (previous hole tiles + pin)
         foreach (Transform child in transform)
-        {
             Destroy(child.gameObject);
-        }
+
+        tileRenderers = null;
+        terrainGrid = null;
+        cachedSquareSprite = null;
+        cachedCircleSprite = null;
     }
 }

@@ -12,10 +12,12 @@ public class GameManager : MonoBehaviour
     public HoleGenerator holeGenerator;
     public BallController ballController;
     public UIManager uiManager;
+    public CameraController cameraController;
 
     [Header("Game State")]
     public int currentStrokes = 0;
     public bool holeComplete = false;
+    public bool roundActive = false;
     public int par = 3;
 
     void Awake()
@@ -27,58 +29,68 @@ public class GameManager : MonoBehaviour
         else
         {
             Destroy(gameObject);
+            return;
         }
+
+        Application.targetFrameRate = 60;
     }
 
     void Start()
     {
-        // Start with UI showing "Generate Hole Near Me" button
+        LocationProvider.StartLocationService();
         uiManager.ShowStartScreen();
     }
 
     /// <summary>
     /// Called when player taps "Generate Hole Near Me".
-    /// Uses device GPS or fallback coordinates as seed.
     /// </summary>
     public void GenerateHoleNearMe()
     {
-        // Reset game state
         currentStrokes = 0;
         holeComplete = false;
+        roundActive = true;
         uiManager.UpdateStrokeCount(0);
 
-        // Get location (real GPS or fallback)
         Vector2 location = LocationProvider.GetLocation();
-
-        // Generate the hole using location as seed
         holeGenerator.GenerateHole(location.x, location.y);
 
-        // Place the ball on the tee
         Vector2 teePos = holeGenerator.GetTeePosition();
         ballController.PlaceBall(teePos);
-        ballController.EnableAiming(true);
+        ballController.SetActive(true);
 
-        // Update UI
+        cameraController.SnapToPosition(teePos);
+
         uiManager.ShowGameScreen();
         uiManager.UpdateHoleInfo(par, location);
+        uiManager.UpdateTerrainDisplay("Tee Box");
     }
 
-    /// <summary>
-    /// Called each time the player hits the ball.
-    /// </summary>
     public void OnShotTaken()
     {
         currentStrokes++;
         uiManager.UpdateStrokeCount(currentStrokes);
     }
 
-    /// <summary>
-    /// Called when the ball lands in the hole (on the green flag position).
-    /// </summary>
+    public void AddPenaltyStroke()
+    {
+        currentStrokes++;
+        uiManager.UpdateStrokeCount(currentStrokes);
+    }
+
+    public void OnBallStopped(Vector2 position)
+    {
+        if (holeComplete) return;
+
+        HoleGenerator.TerrainType terrain = holeGenerator.GetTerrainAtWorldPos(position);
+        string terrainName = terrain.ToString();
+        uiManager.UpdateTerrainDisplay(terrainName);
+    }
+
     public void OnHoleComplete()
     {
         holeComplete = true;
-        ballController.EnableAiming(false);
+        roundActive = false;
+        ballController.SetActive(false);
 
         string scoreLabel = GetScoreLabel(currentStrokes, par);
         uiManager.ShowHoleComplete(currentStrokes, par, scoreLabel);
@@ -87,12 +99,13 @@ public class GameManager : MonoBehaviour
     string GetScoreLabel(int strokes, int holePar)
     {
         int diff = strokes - holePar;
-        if (strokes == 1) return "Hole in One!";
+        if (strokes == 1) return "HOLE IN ONE!";
         if (diff <= -2) return "Eagle!";
         if (diff == -1) return "Birdie!";
         if (diff == 0) return "Par";
         if (diff == 1) return "Bogey";
         if (diff == 2) return "Double Bogey";
+        if (diff == 3) return "Triple Bogey";
         return "+" + diff;
     }
 }

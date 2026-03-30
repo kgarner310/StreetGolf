@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Golf Game — Visual Mockup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #111;
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 20px;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .phone-frame {
+    width: 320px;
+    height: 640px;
+    background: #0a1c0a;
+    border-radius: 32px;
+    border: 3px solid #333;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .phone-frame .notch {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 24px;
+    background: #111;
+    border-radius: 0 0 16px 16px;
+    z-index: 100;
+  }
+
+  /* --- Canvas for hole rendering --- */
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* --- Overlay panels --- */
+  .overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    pointer-events: all;
+  }
+
+  /* --- Start Screen --- */
+  .start-screen {
+    background: rgba(14, 36, 14, 0.95);
+  }
+  .start-screen h1 {
+    font-size: 52px;
+    color: #fff;
+    letter-spacing: 12px;
+    margin-bottom: 8px;
+  }
+  .start-screen .subtitle {
+    font-size: 16px;
+    color: #8fc88f;
+    margin-bottom: 30px;
+  }
+  .start-screen .desc {
+    font-size: 12px;
+    color: rgba(140, 190, 140, 0.7);
+    text-align: center;
+    line-height: 1.6;
+    margin-bottom: 30px;
+    padding: 0 20px;
+  }
+  .start-screen .btn {
+    background: #3a8a30;
+    color: #fff;
+    border: none;
+    padding: 14px 28px;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 8px;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  .start-screen .btn:hover { background: #4a9a40; }
+  .start-screen .hint {
+    font-size: 11px;
+    color: rgba(140, 190, 140, 0.45);
+    margin-top: 30px;
+    text-align: center;
+    font-style: italic;
+    line-height: 1.5;
+  }
+
+  /* --- Loading Screen --- */
+  .loading-screen {
+    background: rgba(10, 28, 10, 0.95);
+  }
+  .loading-screen .dots {
+    font-size: 48px;
+    color: #6fd65e;
+    animation: pulse 1.2s infinite;
+    margin-bottom: 16px;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+  .loading-screen .label {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+  .loading-screen .detail {
+    font-size: 12px;
+    color: rgba(140, 190, 140, 0.6);
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  /* --- HUD --- */
+  .hud {
+    position: absolute;
+    top: 24px;
+    left: 0; right: 0;
+    z-index: 40;
+    pointer-events: none;
+  }
+  .hud-bar {
+    background: rgba(0,0,0,0.6);
+    margin: 0 8px;
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .hud-left .stroke-num {
+    font-size: 40px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1;
+  }
+  .hud-left .stroke-label {
+    font-size: 10px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+  .hud-right {
+    text-align: right;
+  }
+  .hud-right .hole-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #e8d86a;
+    margin-bottom: 2px;
+  }
+  .hud-right .biome-badge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+  }
+  .hud-right .par-info {
+    font-size: 11px;
+    color: #ccc;
+  }
+  .hud-right .terrain {
+    font-size: 10px;
+    color: #7cf07c;
+    margin-top: 2px;
+  }
+
+  /* --- Completion Screen --- */
+  .complete-screen {
+    background: rgba(0,0,0,0.85);
+  }
+  .complete-screen .score-label {
+    font-size: 48px;
+    font-weight: 800;
+    color: #f0d050;
+    margin-bottom: 8px;
+  }
+  .complete-screen .score-detail {
+    font-size: 18px;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+  .complete-screen .hole-summary {
+    font-size: 13px;
+    color: #8fc88f;
+    margin-bottom: 28px;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .complete-screen .btn {
+    background: #3a8a30;
+    color: #fff;
+    border: none;
+    padding: 12px 40px;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 12px;
+  }
+  .complete-screen .btn-secondary {
+    background: #444;
+    color: #bbb;
+    font-size: 12px;
+    padding: 8px 28px;
+  }
+
+  /* --- Water penalty toast --- */
+  .water-toast {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(30, 60, 120, 0.92);
+    padding: 16px 28px;
+    border-radius: 10px;
+    z-index: 60;
+    text-align: center;
+    pointer-events: none;
+  }
+  .water-toast .title {
+    font-size: 20px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .water-toast .sub {
+    font-size: 13px;
+    color: #aaccff;
+  }
+
+  /* --- Ball on canvas --- */
+  .ball {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 2px 2px 3px rgba(0,0,0,0.4);
+    z-index: 30;
+    pointer-events: none;
+  }
+
+  /* --- Aim line --- */
+  .aim-line {
+    position: absolute;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.7), rgba(255,255,255,0.1));
+    transform-origin: left center;
+    z-index: 29;
+    pointer-events: none;
+  }
+
+  /* --- Power line --- */
+  .power-line {
+    position: absolute;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(100,220,100,0.6), rgba(220,60,60,0.6));
+    transform-origin: left center;
+    z-index: 28;
+    pointer-events: none;
+  }
+
+  /* --- Legend / description --- */
+  .screen-label {
+    text-align: center;
+    color: #999;
+    font-size: 13px;
+    margin-top: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+  .screen-desc {
+    text-align: center;
+    color: #666;
+    font-size: 11px;
+    margin-top: 4px;
+    max-width: 320px;
+  }
+
+  /* --- Biome selector bar --- */
+  .biome-bar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 20px 0 10px;
+    width: 100%;
+    max-width: 1400px;
+  }
+  .biome-btn {
+    padding: 8px 14px;
+    border: 2px solid #333;
+    background: #1a1a1a;
+    color: #999;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 6px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+  .biome-btn:hover {
+    border-color: #555;
+    color: #ccc;
+  }
+  .biome-btn.active {
+    border-color: #4a9a40;
+    color: #4a9a40;
+    background: rgba(74, 154, 64, 0.1);
+  }
+
+  .section-title {
+    color: #666;
+    font-size: 14px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-align: center;
+    width: 100%;
+    margin: 20px 0 10px;
+  }
+
+  .row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- BIOME SELECTOR -->
+<div class="biome-bar">
+  <span style="color:#666;font-size:12px;align-self:center;margin-right:8px;">BIOME:</span>
+  <button class="biome-btn active" onclick="selectBiome('suburban')">SUBURBAN</button>
+  <button class="biome-btn" onclick="selectBiome('coastal')">COASTAL</button>
+  <button class="biome-btn" onclick="selectBiome('forest')">FOREST</button>
+  <button class="biome-btn" onclick="selectBiome('urban')">URBAN</button>
+  <button class="biome-btn" onclick="selectBiome('lakeside')">LAKESIDE</button>
+  <button class="biome-btn" onclick="selectBiome('desert')">DESERT</button>
+  <button class="biome-btn" onclick="selectBiome('park')">PARK</button>
+  <button class="biome-btn" onclick="selectBiome('farmland')">FARMLAND</button>
+</div>
+
+<div class="section-title">Game Flow</div>
+
+<div class="row">
+
+<!-- SCREEN 1: START -->
+<div class="column">
+  <div class="phone-frame" id="phone-start">
+    <div class="notch"></div>
+    <div class="overlay start-screen">
+      <h1>GOLF</h1>
+      <div class="subtitle">Real-World Hole Generation</div>
+      <div class="desc">
+        Your surroundings shape the hole.<br>
+        Near water? Expect water hazards.<br>
+        In a city? Tight fairways &amp; bunkers.
+      </div>
+      <button class="btn" onclick="showLoading()">GENERATE HOLE NEAR ME</button>
+      <div class="hint">Drag back from ball to aim &amp; power<br>Release to shoot</div>
+    </div>
+  </div>
+  <div class="screen-label">START SCREEN</div>
+</div>
+
+<!-- SCREEN 2: LOADING -->
+<div class="column">
+  <div class="phone-frame" id="phone-loading">
+    <div class="notch"></div>
+    <div class="overlay loading-screen">
+      <div class="dots">•  •  •</div>
+      <div class="label">SCANNING SURROUNDINGS...</div>
+      <div class="detail">(33.5032, -82.0232)<br>Querying OpenStreetMap</div>
+    </div>
+  </div>
+  <div class="screen-label">LOADING (OSM FETCH)</div>
+  <div class="screen-desc">Queries real-world data ~2-3 sec</div>
+</div>
+
+<!-- SCREEN 3: GAMEPLAY -->
+<div class="column">
+  <div class="phone-frame" id="phone-game" style="position:relative;">
+    <div class="notch"></div>
+    <canvas id="gameCanvas" width="320" height="640"></canvas>
+    <!-- HUD -->
+    <div class="hud" id="gameHud">
+      <div class="hud-bar">
+        <div class="hud-left">
+          <div class="stroke-num" id="hudStrokes">1</div>
+          <div class="stroke-label">Strokes</div>
+        </div>
+        <div class="hud-right">
+          <div class="hole-name" id="hudHoleName">Local #7</div>
+          <div class="biome-badge" id="hudBiome" style="color:#7ce87c;">SUBURBAN</div>
+          <div class="par-info">PAR 3 • (33.50, -82.02)</div>
+          <div class="terrain" id="hudTerrain">FAIRWAY</div>
+        </div>
+      </div>
+    </div>
+    <!-- Ball -->
+    <div class="ball" id="gameBall" style="left:155px;top:480px;"></div>
+    <!-- Aim line -->
+    <div class="aim-line" id="aimLine" style="left:160px;top:483px;width:70px;transform:rotate(-80deg);"></div>
+    <!-- Power line -->
+    <div class="power-line" id="powerLine" style="left:160px;top:483px;width:40px;transform:rotate(100deg);"></div>
+  </div>
+  <div class="screen-label">GAMEPLAY — AIMING</div>
+  <div class="screen-desc">Drag back = slingshot aim. Color shows power.</div>
+</div>
+
+<!-- SCREEN 4: HOLE COMPLETE -->
+<div class="column">
+  <div class="phone-frame" id="phone-complete" style="position:relative;">
+    <div class="notch"></div>
+    <canvas id="completeCanvas" width="320" height="640"></canvas>
+    <div class="overlay complete-screen">
+      <div class="score-label" id="completeLabel">Birdie!</div>
+      <div class="score-detail">2 strokes • Par 3</div>
+      <div class="hole-summary" id="completeSummary">Local #7<br>Suburban Course</div>
+      <button class="btn">PLAY AGAIN</button>
+      <button class="btn btn-secondary">SHIFT LOCATION</button>
+    </div>
+  </div>
+  <div class="screen-label">HOLE COMPLETE</div>
+</div>
+
+<!-- SCREEN 5: WATER HAZARD -->
+<div class="column">
+  <div class="phone-frame" id="phone-water" style="position:relative;">
+    <div class="notch"></div>
+    <canvas id="waterCanvas" width="320" height="640"></canvas>
+    <div class="hud">
+      <div class="hud-bar">
+        <div class="hud-left">
+          <div class="stroke-num">3</div>
+          <div class="stroke-label">Strokes</div>
+        </div>
+        <div class="hud-right">
+          <div class="hole-name" id="waterHoleName">Local #7</div>
+          <div class="biome-badge" id="waterBiome" style="color:#7ce87c;">SUBURBAN</div>
+          <div class="par-info">PAR 3 • (33.50, -82.02)</div>
+          <div class="terrain">WATER</div>
+        </div>
+      </div>
+    </div>
+    <div class="water-toast">
+      <div class="title">WATER HAZARD</div>
+      <div class="sub">+1 Penalty Stroke</div>
+    </div>
+    <div class="ball" style="left:95px;top:340px;opacity:0.4;"></div>
+  </div>
+  <div class="screen-label">WATER PENALTY</div>
+  <div class="screen-desc">Auto-dismisses after 1.8s</div>
+</div>
+
+</div><!-- /row -->
+
+<script>
+// --- BIOME DEFINITIONS ---
+const BIOMES = {
+  suburban: {
+    name: 'Local', label: 'SUBURBAN', color: '#7ce87c',
+    rough: '#264a1e', fairway: '#47a038', green: '#6cc858',
+    sand: '#eddB96', water: '#2e6cb8', tee: '#80b873',
+    fwWidth: 1.0, bunkers: 2, waterChance: 0.5, waterSide: 'right',
+    wobbleAmp: 1.5, wobbleFreq: 2.0
+  },
+  coastal: {
+    name: 'Links', label: 'COASTAL', color: '#80ccff',
+    rough: '#4d6b38', fairway: '#669950', green: '#6cc858',
+    sand: '#eddB96', water: '#2e6cb8', tee: '#80b873',
+    fwWidth: 1.0, bunkers: 4, waterChance: 0.8, waterSide: 'right',
+    wobbleAmp: 2.5, wobbleFreq: 1.5
+  },
+  forest: {
+    name: 'Pines', label: 'FOREST', color: '#33b84d',
+    rough: '#1a4d14', fairway: '#388f2e', green: '#6cc858',
+    sand: '#eddB96', water: '#2e6cb8', tee: '#80b873',
+    fwWidth: 0.5, bunkers: 1, waterChance: 0.3, waterSide: 'none',
+    wobbleAmp: 2.8, wobbleFreq: 2.5
+  },
+  urban: {
+    name: 'City', label: 'URBAN', color: '#ccb87a',
+    rough: '#33592e', fairway: '#408c33', green: '#6cc858',
+    sand: '#eddB96', water: '#2e6cb8', tee: '#80b873',
+    fwWidth: 0.55, bunkers: 4, waterChance: 0.2, waterSide: 'none',
+    wobbleAmp: 0.8, wobbleFreq: 1.0
+  },
+  lakeside: {
+    name: 'Lakeside', label: 'LAKESIDE', color: '#4d99e6',
+    rough: '#2e6b26', fairway: '#47a038', green: '#6cc858',
+    sand: '#eddB96', water: '#2e6cb8', tee: '#80b873',
+    fwWidth: 0.85, bunkers: 2, waterChance: 0.95, waterSide: 'surround',
+    wobbleAmp: 1.5, wobbleFreq: 2.0
+  },
+  desert: {
+    name: 'Dunes', label: 'DESERT', color: '#e6cc66',
+    rough: '#8c7a4d', fairway: '#5c8c40', green: '#6cc858',
+    sand: '#eddB96', water: '#2e6cb8', tee: '#80b873',
+    fwWidth: 1.2, bunkers: 5, waterChance: 0.1, waterSide: 'none',
+    wobbleAmp: 1.0, wobbleFreq: 1.5
+  },
+  park: {
+    name: 'Park', label: 'PARK', color: '#66e666',
+    rough: '#33733e', fairway: '#4dae40', green: '#6cc858',
+    sand: '#eddB96', water: '#2e6cb8', tee: '#80b873',
+    fwWidth: 1.4, bunkers: 1, waterChance: 0.35, waterSide: 'left',
+    wobbleAmp: 0.7, wobbleFreq: 1.0
+  },
+  farmland: {
+    name: 'Meadow', label: 'FARMLAND', color: '#99cc4d',
+    rough: '#477a33', fairway: '#5aad47', green: '#6cc858',
+    sand: '#eddB96', water: '#2e6cb8', tee: '#80b873',
+    fwWidth: 1.5, bunkers: 1, waterChance: 0.15, waterSide: 'none',
+    wobbleAmp: 0.5, wobbleFreq: 0.8
+  }
+};
+
+let currentBiome = 'suburban';
+
+// --- SEEDED RANDOM ---
+function seededRandom(seed) {
+  let s = seed;
+  return function() {
+    s = (s * 16807 + 0) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+// --- HOLE GENERATION ---
+function generateHole(canvas, biomeKey, seed, options = {}) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+  const biome = BIOMES[biomeKey];
+  const rng = seededRandom(seed);
+
+  const GRID_W = 24;
+  const GRID_H = 44;
+  const TILE_W = W / GRID_W;
+  const TILE_H = H / GRID_H;
+
+  // Init grid with rough
+  let grid = Array.from({length: GRID_W}, () => Array(GRID_H).fill('rough'));
+
+  // Tee (bottom center)
+  const teeCX = Math.floor(GRID_W / 2);
+  const teeCY = 3;
+  for (let x = teeCX - 1; x <= teeCX + 1; x++)
+    for (let y = teeCY; y <= teeCY + 1; y++)
+      if (x >= 0 && x < GRID_W && y >= 0 && y < GRID_H) grid[x][y] = 'tee';
+
+  // Green (near top, offset)
+  const greenR = 3 + Math.floor(rng() * 2);
+  let greenCX = Math.floor(GRID_W / 2) + Math.floor(rng() * 7) - 3;
+  let greenCY = GRID_H - greenR - 4 - Math.floor(rng() * 4);
+  greenCX = Math.max(greenR + 1, Math.min(GRID_W - greenR - 1, greenCX));
+  greenCY = Math.max(Math.floor(GRID_H / 2), Math.min(GRID_H - greenR - 2, greenCY));
+
+  const stretchX = 0.8 + rng() * 0.4;
+  const stretchY = 0.8 + rng() * 0.4;
+
+  for (let x = 0; x < GRID_W; x++) {
+    for (let y = 0; y < GRID_H; y++) {
+      const dx = (x - greenCX) / (greenR * stretchX);
+      const dy = (y - greenCY) / (greenR * stretchY);
+      if (dx * dx + dy * dy <= 1) grid[x][y] = 'green';
+    }
+  }
+
+  // Fairway
+  const fwBaseWidth = 2 + Math.floor(rng() * 2);
+  const fwWidth = Math.max(1, Math.min(6, Math.round(fwBaseWidth * biome.fwWidth)));
+  const steps = 50;
+
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    let baseX = teeCX + (greenCX - teeCX) * t;
+    let baseY = 5 + (greenCY - 5) * t;
+    const wobble = Math.sin(t * biome.wobbleFreq * Math.PI) * biome.wobbleAmp;
+    const taper = Math.sin(t * Math.PI);
+    const curW = Math.round(fwWidth * (0.6 + 0.4 * taper));
+
+    for (let dx = -curW; dx <= curW; dx++) {
+      const tx = Math.round(baseX + wobble + dx);
+      const ty = Math.round(baseY);
+      if (tx >= 0 && tx < GRID_W && ty >= 0 && ty < GRID_H && grid[tx][ty] === 'rough')
+        grid[tx][ty] = 'fairway';
+    }
+  }
+
+  // Bunkers
+  for (let b = 0; b < biome.bunkers; b++) {
+    const angle = rng() * Math.PI * 2;
+    let dist, bx, by, br;
+    if (b < Math.min(biome.bunkers, 3)) {
+      dist = greenR + 1.5 + rng() * 2.5;
+      bx = Math.round(greenCX + Math.cos(angle) * dist);
+      by = Math.round(greenCY + Math.sin(angle) * dist);
+    } else {
+      const side = rng() < 0.5 ? -1 : 1;
+      bx = Math.floor(GRID_W / 2) + side * (3 + Math.floor(rng() * 3));
+      by = Math.floor(GRID_H / 4) + Math.floor(rng() * (GRID_H / 3));
+    }
+    br = 1 + Math.floor(rng() * 2);
+    if (biomeKey === 'coastal' || biomeKey === 'desert') br += 1;
+
+    for (let x = bx - br; x <= bx + br; x++) {
+      for (let y = by - br; y <= by + br; y++) {
+        if (x >= 0 && x < GRID_W && y >= 0 && y < GRID_H) {
+          const d = Math.sqrt((x-bx)*(x-bx) + (y-by)*(y-by));
+          if (d <= br && grid[x][y] !== 'green' && grid[x][y] !== 'tee')
+            grid[x][y] = 'sand';
+        }
+      }
+    }
+  }
+
+  // Water
+  if (rng() < biome.waterChance) {
+    if (biome.waterSide === 'surround') {
+      // Island green
+      const waterR = greenR + 3;
+      for (let x = 0; x < GRID_W; x++) {
+        for (let y = 0; y < GRID_H; y++) {
+          const dist = Math.sqrt((x-greenCX)*(x-greenCX) + (y-greenCY)*(y-greenCY));
+          if (dist > greenR + 0.5 && dist <= waterR) {
+            const angleToTee = Math.atan2(3 - greenCY, teeCX - greenCX);
+            const angleToTile = Math.atan2(y - greenCY, x - greenCX);
+            let diff = Math.abs(angleToTee - angleToTile) * 180 / Math.PI;
+            if (diff > 180) diff = 360 - diff;
+            if (diff > 25 && grid[x][y] !== 'green' && grid[x][y] !== 'tee')
+              grid[x][y] = 'water';
+          }
+        }
+      }
+    } else if (biome.waterSide === 'left' || biome.waterSide === 'right') {
+      const side = biome.waterSide === 'left' ? -1 : 1;
+      const wx = Math.floor(GRID_W / 2) + side * (5 + Math.floor(rng() * 2));
+      const wy = Math.floor(GRID_H / 2);
+      const rx = 2 + Math.floor(rng() * 2);
+      const ry = 6 + Math.floor(rng() * 4);
+      for (let x = wx - rx; x <= wx + rx; x++) {
+        for (let y = wy - ry; y <= wy + ry; y++) {
+          if (x >= 0 && x < GRID_W && y >= 0 && y < GRID_H) {
+            const dx = (x - wx) / rx, dy = (y - wy) / ry;
+            if (dx*dx + dy*dy <= 1 && grid[x][y] !== 'green' && grid[x][y] !== 'tee')
+              grid[x][y] = 'water';
+          }
+        }
+      }
+    } else if (biome.waterSide !== 'none') {
+      const wx = Math.floor(GRID_W / 2) + (rng() < 0.5 ? -1 : 1) * (4 + Math.floor(rng() * 3));
+      const wy = Math.floor(GRID_H / 3) + Math.floor(rng() * (GRID_H / 4));
+      const rx = 2 + Math.floor(rng() * 2);
+      const ry = 2 + Math.floor(rng() * 3);
+      for (let x = wx - rx; x <= wx + rx; x++) {
+        for (let y = wy - ry; y <= wy + ry; y++) {
+          if (x >= 0 && x < GRID_W && y >= 0 && y < GRID_H) {
+            const dx = (x - wx) / rx, dy = (y - wy) / ry;
+            if (dx*dx + dy*dy <= 1 && grid[x][y] !== 'green' && grid[x][y] !== 'tee')
+              grid[x][y] = 'water';
+          }
+        }
+      }
+    }
+  }
+
+  // Render
+  const colors = {
+    rough: biome.rough, fairway: biome.fairway, green: biome.green,
+    sand: biome.sand, water: biome.water, tee: biome.tee
+  };
+
+  for (let x = 0; x < GRID_W; x++) {
+    for (let y = 0; y < GRID_H; y++) {
+      ctx.fillStyle = colors[grid[x][y]];
+      // Flip Y so tee is at bottom
+      const drawY = GRID_H - 1 - y;
+      ctx.fillRect(x * TILE_W + 0.5, drawY * TILE_H + 0.5, TILE_W - 1, TILE_H - 1);
+    }
+  }
+
+  // Pin (hole + flag)
+  const pinX = (greenCX + 0.5) * TILE_W;
+  const pinY = (GRID_H - 1 - greenCY + 0.5) * TILE_H;
+
+  // Hole circle
+  ctx.beginPath();
+  ctx.arc(pinX, pinY, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#111';
+  ctx.fill();
+
+  // Flagpole
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pinX, pinY);
+  ctx.lineTo(pinX, pinY - 14);
+  ctx.stroke();
+
+  // Flag
+  ctx.fillStyle = '#e03030';
+  ctx.beginPath();
+  ctx.moveTo(pinX, pinY - 14);
+  ctx.lineTo(pinX + 8, pinY - 11);
+  ctx.lineTo(pinX, pinY - 8);
+  ctx.fill();
+
+  return { greenCX, greenCY, teeCX, teeCY, pinX, pinY };
+}
+
+// --- RENDER ALL SCREENS ---
+function renderAll(biomeKey) {
+  const biome = BIOMES[biomeKey];
+  const holeNum = (Math.abs(Math.round(33.50 * 100)) + Math.abs(Math.round(-82.02 * 100))) % 18 + 1;
+  const holeName = `${biome.name} #${holeNum}`;
+
+  // Game canvas
+  generateHole(document.getElementById('gameCanvas'), biomeKey, 42);
+
+  // Complete canvas (dimmed behind overlay)
+  const cc = document.getElementById('completeCanvas');
+  generateHole(cc, biomeKey, 42);
+  const cctx = cc.getContext('2d');
+  cctx.fillStyle = 'rgba(0,0,0,0.3)';
+  cctx.fillRect(0, 0, cc.width, cc.height);
+
+  // Water canvas
+  generateHole(document.getElementById('waterCanvas'), biomeKey, 42);
+
+  // Update HUD text
+  document.getElementById('hudHoleName').textContent = holeName;
+  document.getElementById('hudBiome').textContent = biome.label;
+  document.getElementById('hudBiome').style.color = biome.color;
+
+  document.getElementById('waterHoleName').textContent = holeName;
+  document.getElementById('waterBiome').textContent = biome.label;
+  document.getElementById('waterBiome').style.color = biome.color;
+
+  document.getElementById('completeSummary').innerHTML = `${holeName}<br>${biome.label} Course`;
+}
+
+function selectBiome(key) {
+  currentBiome = key;
+  document.querySelectorAll('.biome-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  renderAll(key);
+}
+
+// Initial render
+renderAll('suburban');
+</script>
+
+</body>
+</html>

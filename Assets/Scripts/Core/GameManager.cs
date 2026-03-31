@@ -1,138 +1,211 @@
+using System;
+using System.Collections;
 using UnityEngine;
+using StreetGolf.AR;
+using StreetGolf.Golf;
+using StreetGolf.GPS;
 
-/// <summary>
-/// Central game manager. Coordinates the flow:
-/// 1. Player taps "Generate Hole Near Me"
-/// 2. GPS coords are fetched
-/// 3. OSM Overpass is queried for nearby features
-/// 4. LocationProfile is built (biome, water, bunkers, etc.)
-/// 5. Hole is generated from profile + coord seed
-/// 6. Player plays the hole
-/// </summary>
-public class GameManager : MonoBehaviour
+namespace StreetGolf.Core
 {
-    public static GameManager Instance { get; private set; }
-
-    [Header("References")]
-    public HoleGenerator holeGenerator;
-    public BallController ballController;
-    public UIManager uiManager;
-    public CameraController cameraController;
-    public LocationDataFetcher locationFetcher;
-
-    [Header("Game State")]
-    public int currentStrokes = 0;
-    public bool holeComplete = false;
-    public bool roundActive = false;
-    public int par = 3;
-
-    private Vector2 currentLocation;
-
-    void Awake()
+    /// <summary>
+    /// Main game flow controller. Manages the lifecycle of a street golf hole:
+    /// 1. Player opens app at their location
+    /// 2. AR detects the ground, ball is placed at their feet
+    /// 3. A hole/target is generated nearby using GPS
+    /// 4. Player aims by pointing phone, swipes to hit
+    /// 5. Repeat until ball reaches the hole
+    /// 6. Score the hole, generate next one
+    /// </summary>
+    public class GameManager : MonoBehaviour
     {
-        if (Instance == null)
+        public static GameManager Instance { get; private set; }
+
+        public event Action<GameState> OnStateChanged;
+        public event Action<HoleResult> OnHoleCompleted;
+        public event Action<int> OnHoleStarted;
+
+        [Header("References")]
+        [SerializeField] private GolfBall ball;
+        [SerializeField] private HoleTarget hole;
+        [SerializeField] private ShotController shotController;
+        [SerializeField] private HoleGenerator holeGenerator;
+
+        [Header("Settings")]
+        [SerializeField] private float shotSettleDelay = 1.5f;
+        [SerializeField] private bool oneHoleMode = false;
+
+        public bool OneHoleMode => oneHoleMode;
+        public GameState CurrentState { get; private set; } = GameState.Initializing;
+        public int CurrentHoleNumber { get; private set; }
+        public int TotalStrokes { get; private set; }
+        public HoleResult LastResult { get; private set; }
+
+        private void Awake()
         {
+            if (Instance != null)
+            {
+                Destroy(gameObject);
+                return;
+            }
             Instance = this;
         }
-        else
+
+        private void Start()
         {
-            Destroy(gameObject);
-            return;
+            SetState(GameState.Initializing);
+            StartCoroutine(InitializeGame());
         }
 
-        Application.targetFrameRate = 60;
+        private IEnumerator InitializeGame()
+        {
+            // Start GPS tracking
+            GPSLocationService.Instance.StartTracking();
+
+            // Wait for GPS fix
+            while (!GPSLocationService.Instance.HasFix)
+                yield return new WaitForSeconds(0.5f);
+
+            // Wait for AR ground detection
+            SetState(GameState.DetectingSurface);
+            while (!ARSurfaceManager.Instance.HasDetectedGround)
+                yield return new WaitForSeconds(0.5f);
+
+            // Ready to play
+            StartNewHole();
+        }
+
+        public void StartNewHole()
+        {
+            CurrentHoleNumber++;
+            ball.ResetShots();
+
+            SetState(GameState.PlacingBall);
+
+            // Place ball at player's feet (AR ground in front of camera)
+            if (ARSurfaceManager.Instance.TryGetGroundAhead(out Pose groundPose))
+            {
+                ball.PlaceAt(groundPose.position);
+            }
+            else
+            {
+                // Fallback: place at camera position on ground
+                Vector3 camPos = ARCameraController.Instance.MainCamera.transform.position;
+                Vector3 camForward = ARCameraController.Instance.GetAimDirection();
+                ball.PlaceAt(camPos + camForward * 1f + Vector3.down * camPos.y);
+            }
+
+            // Generate a hole target nearby; prefer the most popular regional landmark.
+            HoleConfig holeConfig;
+            if (LandmarkService.Instance != null &&
+                LandmarkService.Instance.TryGetBestLandmark(GPSLocationService.Instance.CurrentPosition, out var bestLandmark))
+            {
+                holeConfig = holeGenerator.GenerateHoleAtLandmark(
+                    GPSLocationService.Instance.CurrentPosition, bestLandmark);
+            }
+            else
+            {
+                holeConfig = holeGenerator.GenerateHole(
+                    GPSLocationService.Instance.CurrentPosition, CurrentHoleNumber);
+            }
+
+            hole.SetTarget(holeConfig.TargetPosition, holeConfig.Par, holeConfig.HoleName);
+            hole.SetBallReference(ball);
+
+            // Subscribe to events
+            ball.OnBallResting -= OnBallSettled;
+            ball.OnBallResting += OnBallSettled;
+            ball.OnBallInHole -= OnBallSunk;
+            ball.OnBallInHole += OnBallSunk;
+
+            SetState(GameState.Aiming);
+            shotController.EnableShooting();
+
+            OnHoleStarted?.Invoke(CurrentHoleNumber);
+        }
+
+        private void OnBallSettled()
+        {
+            StartCoroutine(HandleBallSettled());
+        }
+
+        private IEnumerator HandleBallSettled()
+        {
+            SetState(GameState.BallSettling);
+            yield return new WaitForSeconds(shotSettleDelay);
+
+            // Ball stopped but didn't reach hole — shoot again
+            SetState(GameState.Aiming);
+            shotController.EnableShooting();
+        }
+
+        private void OnBallSunk()
+        {
+            shotController.DisableShooting();
+
+            LastResult = new HoleResult
+            {
+                HoleNumber = CurrentHoleNumber,
+                Strokes = ball.ShotCount,
+                Par = hole.Par,
+                DistanceMeters = GPSLocationService.Instance.DistanceTo(hole.TargetGPSPosition),
+                ScoreName = GetScoreName(ball.ShotCount, hole.Par)
+            };
+
+            TotalStrokes += ball.ShotCount;
+            OnHoleCompleted?.Invoke(LastResult);
+
+            if (oneHoleMode)
+            {
+                SetState(GameState.RoundComplete);
+            }
+            else
+            {
+                SetState(GameState.HoleComplete);
+            }
+        }
+
+        private void SetState(GameState newState)
+        {
+            CurrentState = newState;
+            OnStateChanged?.Invoke(newState);
+        }
+
+        private string GetScoreName(int strokes, int par)
+        {
+            int diff = strokes - par;
+            return diff switch
+            {
+                <= -3 => "Albatross",
+                -2 => "Eagle",
+                -1 => "Birdie",
+                0 => "Par",
+                1 => "Bogey",
+                2 => "Double Bogey",
+                3 => "Triple Bogey",
+                _ => $"+{diff}"
+            };
+        }
     }
 
-    void Start()
+    public enum GameState
     {
-        LocationProvider.StartLocationService();
-        uiManager.ShowStartScreen();
+        Initializing,
+        DetectingSurface,
+        PlacingBall,
+        Aiming,
+        BallInFlight,
+        BallSettling,
+        HoleComplete,
+        RoundComplete
     }
 
-    /// <summary>
-    /// Called when player taps "Generate Hole Near Me".
-    /// Kicks off async OSM fetch, then generates hole from profile.
-    /// </summary>
-    public void GenerateHoleNearMe()
+    [Serializable]
+    public struct HoleResult
     {
-        currentStrokes = 0;
-        holeComplete = false;
-        roundActive = false;
-        uiManager.UpdateStrokeCount(0);
-
-        currentLocation = LocationProvider.GetLocation();
-
-        // Show loading state while fetching OSM data
-        uiManager.ShowLoadingScreen(currentLocation);
-
-        // Fetch real-world surroundings, then generate
-        locationFetcher.FetchProfile(currentLocation.x, currentLocation.y, OnProfileReady);
-    }
-
-    /// <summary>
-    /// Called when LocationDataFetcher finishes (success or fallback).
-    /// </summary>
-    void OnProfileReady(LocationProfile profile)
-    {
-        // Generate the hole shaped by real surroundings
-        holeGenerator.GenerateHole(currentLocation.x, currentLocation.y, profile);
-
-        // Place ball on tee
-        Vector2 teePos = holeGenerator.GetTeePosition();
-        ballController.PlaceBall(teePos);
-        ballController.SetActive(true);
-
-        cameraController.SnapToPosition(teePos);
-
-        roundActive = true;
-
-        // Update UI with biome info
-        uiManager.ShowGameScreen();
-        uiManager.UpdateHoleInfo(par, currentLocation, profile);
-        uiManager.UpdateTerrainDisplay("Tee Box");
-    }
-
-    public void OnShotTaken()
-    {
-        currentStrokes++;
-        uiManager.UpdateStrokeCount(currentStrokes);
-    }
-
-    public void AddPenaltyStroke()
-    {
-        currentStrokes++;
-        uiManager.UpdateStrokeCount(currentStrokes);
-    }
-
-    public void OnBallStopped(Vector2 position)
-    {
-        if (holeComplete) return;
-
-        HoleGenerator.TerrainType terrain = holeGenerator.GetTerrainAtWorldPos(position);
-        uiManager.UpdateTerrainDisplay(terrain.ToString());
-    }
-
-    public void OnHoleComplete()
-    {
-        holeComplete = true;
-        roundActive = false;
-        ballController.SetActive(false);
-
-        string scoreLabel = GetScoreLabel(currentStrokes, par);
-        LocationProfile profile = holeGenerator.GetProfile();
-        uiManager.ShowHoleComplete(currentStrokes, par, scoreLabel, profile);
-    }
-
-    string GetScoreLabel(int strokes, int holePar)
-    {
-        int diff = strokes - holePar;
-        if (strokes == 1) return "HOLE IN ONE!";
-        if (diff <= -2) return "Eagle!";
-        if (diff == -1) return "Birdie!";
-        if (diff == 0) return "Par";
-        if (diff == 1) return "Bogey";
-        if (diff == 2) return "Double Bogey";
-        if (diff == 3) return "Triple Bogey";
-        return "+" + diff;
+        public int HoleNumber;
+        public int Strokes;
+        public int Par;
+        public float DistanceMeters;
+        public string ScoreName;
     }
 }

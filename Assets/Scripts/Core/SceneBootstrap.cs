@@ -1,60 +1,41 @@
 using UnityEngine;
 
-/// <summary>
-/// Bootstraps the entire scene at runtime. Attach this to a single empty
-/// GameObject in your scene — it creates everything else automatically.
-///
-/// Just: create empty scene → add one empty GameObject → add this script → Play.
-/// </summary>
-public class SceneBootstrap : MonoBehaviour
+namespace StreetGolf.Core
 {
-    void Awake()
+    /// <summary>
+    /// Bootstraps the main game scene. Ensures all required managers exist
+    /// and initializes them in the correct order.
+    /// Attach this to an empty GameObject in the main scene.
+    /// </summary>
+    public class SceneBootstrap : MonoBehaviour
     {
-        // 1. Camera
-        Camera cam = Camera.main;
-        if (cam == null)
+        [Header("Manager Prefabs (assign in inspector)")]
+        [SerializeField] private GameObject gpsServicePrefab;
+        [SerializeField] private GameObject soundManagerPrefab;
+        [SerializeField] private GameObject gameManagerPrefab;
+
+        private void Awake()
         {
-            GameObject camObj = new GameObject("MainCamera");
-            cam = camObj.AddComponent<Camera>();
-            camObj.tag = "MainCamera";
+            Application.targetFrameRate = 60;
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+            Input.multiTouchEnabled = false;
         }
-        cam.orthographic = true;
-        cam.orthographicSize = 8f;
-        cam.backgroundColor = new Color(0.10f, 0.28f, 0.10f);
-        cam.transform.position = new Vector3(0, 0, -10);
-        cam.clearFlags = CameraClearFlags.SolidColor;
 
-        // 2. Hole Generator
-        GameObject holeObj = new GameObject("HoleGenerator");
-        HoleGenerator holeGen = holeObj.AddComponent<HoleGenerator>();
+        private void Start()
+        {
+            // Ensure persistent managers exist
+            EnsureManager<GPS.GPSLocationService>(gpsServicePrefab);
+            EnsureManager<Utils.SoundManager>(soundManagerPrefab);
 
-        // 3. Location Data Fetcher (OSM Overpass)
-        GameObject fetcherObj = new GameObject("LocationDataFetcher");
-        LocationDataFetcher fetcher = fetcherObj.AddComponent<LocationDataFetcher>();
+            Debug.Log("StreetGolf: Scene initialized. Ready to play.");
+        }
 
-        // 4. Ball
-        GameObject ballObj = new GameObject("Ball");
-        BallController ball = ballObj.AddComponent<BallController>();
-        ball.holeGenerator = holeGen;
-        ball.SetActive(false);
-
-        // 5. Camera Controller
-        CameraController camCtrl = cam.gameObject.AddComponent<CameraController>();
-        camCtrl.ballTransform = ballObj.transform;
-
-        // 6. UI Canvas
-        GameObject canvasObj = new GameObject("UICanvas");
-        UIManager ui = canvasObj.AddComponent<UIManager>();
-
-        // 7. Game Manager
-        GameObject gmObj = new GameObject("GameManager");
-        GameManager gm = gmObj.AddComponent<GameManager>();
-        gm.holeGenerator = holeGen;
-        gm.ballController = ball;
-        gm.uiManager = ui;
-        gm.cameraController = camCtrl;
-        gm.locationFetcher = fetcher;
-
-        Debug.Log("SceneBootstrap: All systems created (with OSM location fetcher).");
+        private void EnsureManager<T>(GameObject prefab) where T : MonoBehaviour
+        {
+            if (FindFirstObjectByType<T>() == null && prefab != null)
+            {
+                Instantiate(prefab);
+            }
+        }
     }
 }

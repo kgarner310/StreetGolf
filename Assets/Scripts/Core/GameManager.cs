@@ -32,7 +32,9 @@ namespace StreetGolf.Core
 
         [Header("Settings")]
         [SerializeField] private float shotSettleDelay = 1.5f;
+        [SerializeField] private bool oneHoleMode = false;
 
+        public bool OneHoleMode => oneHoleMode;
         public GameState CurrentState { get; private set; } = GameState.Initializing;
         public int CurrentHoleNumber { get; private set; }
         public int TotalStrokes { get; private set; }
@@ -92,11 +94,21 @@ namespace StreetGolf.Core
                 ball.PlaceAt(camPos + camForward * 1f + Vector3.down * camPos.y);
             }
 
-            // Generate a hole target nearby
-            HoleConfig holeConfig = holeGenerator.GenerateHole(
-                GPSLocationService.Instance.CurrentPosition, CurrentHoleNumber);
+            // Generate a hole target nearby; prefer the most popular regional landmark.
+            HoleConfig holeConfig;
+            if (LandmarkService.Instance != null &&
+                LandmarkService.Instance.TryGetBestLandmark(GPSLocationService.Instance.CurrentPosition, out var bestLandmark))
+            {
+                holeConfig = holeGenerator.GenerateHoleAtLandmark(
+                    GPSLocationService.Instance.CurrentPosition, bestLandmark);
+            }
+            else
+            {
+                holeConfig = holeGenerator.GenerateHole(
+                    GPSLocationService.Instance.CurrentPosition, CurrentHoleNumber);
+            }
 
-            hole.SetTarget(holeConfig.TargetPosition, holeConfig.Par);
+            hole.SetTarget(holeConfig.TargetPosition, holeConfig.Par, holeConfig.HoleName);
             hole.SetBallReference(ball);
 
             // Subscribe to events
@@ -129,7 +141,6 @@ namespace StreetGolf.Core
         private void OnBallSunk()
         {
             shotController.DisableShooting();
-            SetState(GameState.HoleComplete);
 
             LastResult = new HoleResult
             {
@@ -142,6 +153,15 @@ namespace StreetGolf.Core
 
             TotalStrokes += ball.ShotCount;
             OnHoleCompleted?.Invoke(LastResult);
+
+            if (oneHoleMode)
+            {
+                SetState(GameState.RoundComplete);
+            }
+            else
+            {
+                SetState(GameState.HoleComplete);
+            }
         }
 
         private void SetState(GameState newState)

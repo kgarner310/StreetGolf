@@ -72,17 +72,55 @@ namespace StreetGolf.Core
         public HoleConfig GenerateHoleAtTarget(GPSPosition playerPosition, GPSPosition target)
         {
             float distance = GPSLocationService.DistanceBetween(playerPosition, target);
-            int par = Mathf.Clamp(
-                Mathf.CeilToInt(distance / metersPerStroke) + 1,
-                minPar, maxPar);
+            int par = CalculateParFromDistance(distance);
 
             return new HoleConfig
             {
                 TargetPosition = target,
                 Par = par,
                 DistanceMeters = distance,
+                Bearing = CalculateBearing(playerPosition, target),
                 HoleName = "Custom Hole"
             };
+        }
+
+        /// <summary>
+        /// Generate a hole using landmark coordinates and a descriptive hole name.
+        /// </summary>
+        public HoleConfig GenerateHoleAtLandmark(GPSPosition playerPosition, GPS.Landmark landmark)
+        {
+            float distance = GPSLocationService.DistanceBetween(playerPosition, landmark.Position);
+            int par = CalculateParFromDistance(distance);
+
+            return new HoleConfig
+            {
+                TargetPosition = landmark.Position,
+                Par = par,
+                DistanceMeters = distance,
+                Bearing = CalculateBearing(playerPosition, landmark.Position),
+                HoleName = landmark.Name
+            };
+        }
+
+        private int CalculateParFromDistance(float distance)
+        {
+            if (distance <= 120f) return 3;
+            if (distance <= 260f) return 4;
+            return 5;
+        }
+
+        private float CalculateBearing(GPSPosition from, GPSPosition to)
+        {
+            double lat1 = from.Latitude * Math.PI / 180.0;
+            double lon1 = from.Longitude * Math.PI / 180.0;
+            double lat2 = to.Latitude * Math.PI / 180.0;
+            double lon2 = to.Longitude * Math.PI / 180.0;
+
+            double y = Math.Sin(lon2 - lon1) * Math.Cos(lat2);
+            double x = Math.Cos(lat1) * Math.Sin(lat2) - Math.Sin(lat1) * Math.Cos(lat2) * Math.Cos(lon2 - lon1);
+            double bearingRad = Math.Atan2(y, x);
+            double bearingDeg = (bearingRad * 180.0 / Math.PI + 360.0) % 360.0;
+            return (float)bearingDeg;
         }
 
         private string GenerateHoleName(int holeNumber)

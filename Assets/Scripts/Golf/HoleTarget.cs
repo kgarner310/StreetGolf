@@ -28,6 +28,7 @@ namespace StreetGolf.Golf
         public GPSPosition TargetGPSPosition { get; private set; }
         public float DistanceFromBall { get; private set; }
         public int Par { get; private set; }
+        public string HoleName { get; private set; }
 
         private GolfBall ball;
 
@@ -40,10 +41,11 @@ namespace StreetGolf.Golf
         /// Place the hole at a GPS position. Converts to Unity world space
         /// relative to where the player started.
         /// </summary>
-        public void SetTarget(GPSPosition gpsPosition, int par = 3)
+        public void SetTarget(GPSPosition gpsPosition, int par = 3, string holeName = "")
         {
             TargetGPSPosition = gpsPosition;
             Par = par;
+            HoleName = holeName;
 
             if (GPSLocationService.Instance != null)
             {
@@ -55,10 +57,11 @@ namespace StreetGolf.Golf
         /// <summary>
         /// Place hole at a world position (e.g., from AR surface tap).
         /// </summary>
-        public void SetTargetAtWorldPosition(Vector3 worldPosition, int par = 3)
+        public void SetTargetAtWorldPosition(Vector3 worldPosition, int par = 3, string holeName = "")
         {
             transform.position = worldPosition;
             Par = par;
+            HoleName = holeName;
 
             if (GPSLocationService.Instance != null)
             {

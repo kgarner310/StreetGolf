@@ -83,6 +83,9 @@ namespace StreetGolf.UI
             if (holeNumberText != null)
                 holeNumberText.text = $"HOLE {holeNumber}";
 
+            if (holeNameText != null && hole != null)
+                holeNameText.text = string.IsNullOrEmpty(hole.HoleName) ? "Street Golf" : hole.HoleName;
+
             if (parText != null && hole != null)
                 parText.text = $"PAR {hole.Par}";
         }

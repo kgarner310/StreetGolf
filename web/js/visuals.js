@@ -32,48 +32,55 @@ const Visuals = {
     introPhase: 0,
     introTimer: 0,
 
+    ready: false,
+
     init() {
-        const canvas = document.getElementById('game-canvas');
+        try {
+            const canvas = document.getElementById('game-canvas');
+            if (!canvas) { console.error('No canvas'); return; }
 
-        this.scene = new THREE.Scene();
-        this.scene.fog = new THREE.FogExp2(0x1a2a1a, 0.0015);
+            if (typeof THREE === 'undefined') { console.error('Three.js not loaded'); return; }
 
-        // Camera — top-down arcade view (create FIRST)
-        this.camera = new THREE.PerspectiveCamera(
-            50, window.innerWidth / window.innerHeight, 0.1, 2000
-        );
-        this.camera.position.set(0, 300, 150);
-        this.camera.lookAt(0, 0, 0);
+            this.scene = new THREE.Scene();
+            this.scene.fog = new THREE.FogExp2(0x1a2a1a, 0.0015);
 
-        // Renderer - dark background for arcade feel
-        this.renderer = new THREE.WebGLRenderer({
-            canvas,
-            antialias: true
-        });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        this.renderer.setClearColor(0x0a1a0a, 1);
+            // Camera
+            this.camera = new THREE.PerspectiveCamera(
+                50, window.innerWidth / window.innerHeight, 0.1, 2000
+            );
+            this.camera.position.set(0, 300, 150);
+            this.camera.lookAt(0, 0, 0);
 
-        // Lighting
-        const ambient = new THREE.AmbientLight(0x445544, 1.0);
-        this.scene.add(ambient);
+            // Renderer — try without antialias first on mobile
+            try {
+                this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            } catch (e) {
+                this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+            }
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            this.renderer.setClearColor(0x0a1a0a, 1);
 
-        const sun = new THREE.DirectionalLight(0xffeedd, 1.0);
-        sun.position.set(100, 200, 50);
-        this.scene.add(sun);
+            // Lighting
+            this.scene.add(new THREE.AmbientLight(0x445544, 1.0));
+            const sun = new THREE.DirectionalLight(0xffeedd, 1.0);
+            sun.position.set(100, 200, 50);
+            this.scene.add(sun);
+            this.scene.add(new THREE.DirectionalLight(0x4488ff, 0.3));
 
-        const fill = new THREE.DirectionalLight(0x4488ff, 0.3);
-        fill.position.set(-50, 100, -50);
-        this.scene.add(fill);
+            // Create world — each wrapped so one failure doesn't kill all
+            try { this._createCampusGround(); } catch(e) { console.warn('ground:', e); }
+            try { this._createBall(); } catch(e) { console.warn('ball:', e); }
+            try { this._createHole(); } catch(e) { console.warn('hole:', e); }
+            try { this._createAimLine(); } catch(e) { console.warn('aim:', e); }
+            try { this._createCourseLine(); } catch(e) { console.warn('line:', e); }
 
-        // Create world — each wrapped so one failure doesn't kill all
-        try { this._createCampusGround(); } catch(e) { console.warn('ground:', e); }
-        try { this._createBall(); } catch(e) { console.warn('ball:', e); }
-        try { this._createHole(); } catch(e) { console.warn('hole:', e); }
-        try { this._createAimLine(); } catch(e) { console.warn('aim:', e); }
-        try { this._createCourseLine(); } catch(e) { console.warn('line:', e); }
-
-        window.addEventListener('resize', () => this._onResize());
+            window.addEventListener('resize', () => this._onResize());
+            this.ready = true;
+        } catch (e) {
+            console.error('Visuals.init failed:', e);
+            this.ready = false;
+        }
     },
 
     _createCampusGround() {
@@ -459,10 +466,10 @@ const Visuals = {
         this.scene.add(this.courseLine);
     },
 
-    // --- Update methods ---
+    // --- Update methods (all guard on this.ready) ---
 
     updateBall(x, y, z) {
-        if (!this.ball) return;
+        if (!this.ready || !this.ball) return;
         this.ball.position.set(x, y + 1.5, z);
         if (this.ballGlow) this.ballGlow.position.set(x, 0.1, z);
         if (this.ballShadow) this.ballShadow.position.set(x, 0.05, z);
@@ -504,7 +511,7 @@ const Visuals = {
     },
 
     setHolePosition(x, z) {
-        if (!this.holeGroup) return;
+        if (!this.ready || !this.holeGroup) return;
         this.holeGroup.position.set(x, 0, z);
         this.holeGroup.visible = true;
 
@@ -544,7 +551,7 @@ const Visuals = {
     },
 
     updateCourseLine(ballPos, holePos) {
-        if (!this.courseLine) return;
+        if (!this.ready || !this.courseLine) return;
         const positions = this.courseLine.geometry.attributes.position;
         const segments = 100;
         for (let i = 0; i <= segments; i++) {
@@ -562,7 +569,7 @@ const Visuals = {
     },
 
     updateFlag(time) {
-        if (!this.flagCloth) return;
+        if (!this.ready || !this.flagCloth) return;
         const geo = this.flagCloth.geometry;
         const pos = geo.attributes.position;
         for (let i = 0; i < pos.count; i++) {
@@ -574,7 +581,7 @@ const Visuals = {
     },
 
     updatePulse(time, distanceFromBall) {
-        if (!this.pulseRing) return;
+        if (!this.ready || !this.pulseRing) return;
         const proximity = Math.max(0, 1 - distanceFromBall / 50);
         const speed = 2 + proximity * 4;
         const amount = 0.1 + proximity * 0.2;
@@ -591,7 +598,7 @@ const Visuals = {
     },
 
     showAimLine(ballPos, dirX, dirZ, power) {
-        if (!this.aimLine || !this.landingMarker) return;
+        if (!this.ready || !this.aimLine || !this.landingMarker) return;
         if (power < 0.05) {
             this.aimLine.visible = false;
             this.landingMarker.visible = false;
@@ -654,7 +661,7 @@ const Visuals = {
 
     // Intro camera animation: sweeps from player to hole
     startIntroAnimation(ballPos, holePos) {
-        if (!this.camera) { this.introAnimating = false; return; }
+        if (!this.ready || !this.camera) { this.introAnimating = false; return; }
         this.introAnimating = true;
         this.introPhase = 0;
         this.introTimer = 0;
@@ -670,7 +677,7 @@ const Visuals = {
     },
 
     updateIntroAnimation(dt) {
-        if (!this.introAnimating || !this.camera) return true; // return done
+        if (!this.ready || !this.introAnimating || !this.camera) return true;
 
         this.introTimer += dt;
         const bp = this.introBallPos;
@@ -722,7 +729,7 @@ const Visuals = {
     },
 
     updateCamera(ballPos, holePos, state) {
-        if (!this.camera || this.introAnimating) return;
+        if (!this.ready || !this.camera || this.introAnimating) return;
 
         const midX = (ballPos.x + holePos.x) * 0.5;
         const midZ = (ballPos.z + holePos.z) * 0.5;

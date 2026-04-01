@@ -8,17 +8,17 @@ const Landmarks = {
 
     // Find the nearest university or college to the player
     async findNearestUniversity(center) {
-        const query = `[out:json][timeout:12];(
-node["amenity"="university"](around:10000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
-way["amenity"="university"](around:10000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
-node["amenity"="college"](around:10000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
-way["amenity"="college"](around:10000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
+        const query = `[out:json][timeout:25];(
+node["amenity"="university"](around:40000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
+way["amenity"="university"](around:40000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
+node["amenity"="college"](around:40000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
+way["amenity"="college"](around:40000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
 );out center body 10;`;
 
         const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
 
         try {
-            const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+            const response = await fetch(url, { signal: AbortSignal.timeout(25000) });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
             const data = await response.json();

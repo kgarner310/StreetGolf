@@ -1,19 +1,61 @@
 // Landmark Service
-// Searches nearby POIs using OpenStreetMap Overpass API
+// Finds nearest university/college and campus POIs using OpenStreetMap Overpass API
 
 const Landmarks = {
     cache: null,
     cacheCenter: null,
     played: new Set(),
 
-    async searchNearby(center, radiusMeters = 500) {
-        // Use cache if valid
+    // Find the nearest university or college to the player
+    async findNearestUniversity(center) {
+        const query = `[out:json][timeout:12];(
+node["amenity"="university"](around:10000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
+way["amenity"="university"](around:10000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
+node["amenity"="college"](around:10000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
+way["amenity"="college"](around:10000,${center.lat.toFixed(6)},${center.lon.toFixed(6)});
+);out center body 10;`;
+
+        const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+        try {
+            const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const data = await response.json();
+            if (!data.elements || data.elements.length === 0) return null;
+
+            const universities = data.elements
+                .filter(el => el.tags && el.tags.name)
+                .map(el => {
+                    const lat = el.center ? el.center.lat : el.lat;
+                    const lon = el.center ? el.center.lon : el.lon;
+                    return {
+                        name: el.tags.name,
+                        position: { lat, lon, alt: 0 },
+                        distance: GPS.distanceBetween(center, { lat, lon })
+                    };
+                })
+                .sort((a, b) => a.distance - b.distance);
+
+            if (universities.length > 0) {
+                console.log(`StreetGolf: Nearest university: ${universities[0].name} (${Math.round(universities[0].distance)}m)`);
+                return universities[0];
+            }
+            return null;
+        } catch (err) {
+            console.warn('University search failed:', err.message);
+            return null;
+        }
+    },
+
+    // Search for interesting POIs near a university campus
+    async searchNearUniversity(center, radiusMeters = 800) {
         if (this.cache && this.cacheCenter &&
             GPS.distanceBetween(center, this.cacheCenter) < 200) {
             return this.cache;
         }
 
-        const query = this._buildQuery(center, radiusMeters);
+        const query = this._buildCampusQuery(center, radiusMeters);
         const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
 
         try {
@@ -26,51 +68,34 @@ const Landmarks = {
             this.cache = landmarks;
             this.cacheCenter = { ...center };
 
-            console.log(`StreetGolf: Found ${landmarks.length} landmarks`);
+            console.log(`StreetGolf: Found ${landmarks.length} campus landmarks`);
             return landmarks;
         } catch (err) {
-            console.warn('Landmark search failed:', err.message);
+            console.warn('Campus landmark search failed:', err.message);
             return null;
         }
     },
 
-    selectForHole(holeNumber, landmarks, minDist = 20, maxDist = 500) {
-        if (!landmarks || landmarks.length === 0) return null;
-
-        let candidates = landmarks.filter(lm =>
-            lm.distance >= minDist &&
-            lm.distance <= maxDist &&
-            !this.played.has(this._key(lm))
-        );
-
-        // Reset if all played
-        if (candidates.length === 0) {
-            this.played.clear();
-            candidates = landmarks.filter(lm =>
-                lm.distance >= minDist && lm.distance <= maxDist
-            );
-        }
-
-        if (candidates.length === 0) return null;
-
-        // Sort by distance, pick based on hole number
-        candidates.sort((a, b) => a.distance - b.distance);
-        const index = Math.min(holeNumber - 1, candidates.length - 1);
-        const selected = candidates[index];
-        this.played.add(this._key(selected));
-
-        return selected;
+    async searchNearby(center, radiusMeters) {
+        return this.searchNearUniversity(center, radiusMeters);
     },
 
-    _buildQuery(center, radius) {
+    selectForHole(holeNumber, landmarks) {
+        if (!landmarks || landmarks.length === 0) return null;
+        return landmarks[(holeNumber - 1) % landmarks.length];
+    },
+
+    _buildCampusQuery(center, radius) {
         const lat = center.lat.toFixed(6);
         const lon = center.lon.toFixed(6);
         return `[out:json][timeout:10];(
 node["tourism"](around:${radius},${lat},${lon});
-node["amenity"~"restaurant|cafe|bar|bank|library|place_of_worship|theatre|cinema|fountain|memorial"](around:${radius},${lat},${lon});
-node["leisure"~"park|playground|garden|pitch"](around:${radius},${lat},${lon});
+node["amenity"~"library|place_of_worship|theatre|fountain|arts_centre"](around:${radius},${lat},${lon});
+node["leisure"~"park|garden|pitch|stadium"](around:${radius},${lat},${lon});
 node["historic"](around:${radius},${lat},${lon});
-);out body 25;`;
+node["building"~"university|chapel|stadium"](around:${radius},${lat},${lon});
+node["man_made"="tower"](around:${radius},${lat},${lon});
+);out body 30;`;
     },
 
     _parseResponse(data, origin) {
@@ -80,7 +105,8 @@ node["historic"](around:${radius},${lat},${lon});
             .filter(el => el.tags && el.tags.name)
             .map(el => ({
                 name: el.tags.name,
-                category: el.tags.tourism || el.tags.amenity || el.tags.leisure || el.tags.historic || 'landmark',
+                category: el.tags.tourism || el.tags.amenity || el.tags.leisure ||
+                    el.tags.historic || el.tags.building || 'landmark',
                 position: { lat: el.lat, lon: el.lon, alt: 0 },
                 distance: GPS.distanceBetween(origin, { lat: el.lat, lon: el.lon })
             }))

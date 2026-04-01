@@ -105,6 +105,11 @@ const UI = {
 
     hideHoleComplete() { this.els.holeComplete.classList.add('hidden'); },
 
+    setUniversityName(name) {
+        const el = document.getElementById('university-name');
+        if (el) el.textContent = name;
+    },
+
     // Haptic feedback
     vibrate(ms = 20) {
         if (navigator.vibrate) navigator.vibrate(ms);

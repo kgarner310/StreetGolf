@@ -32,31 +32,53 @@ const Game = {
     },
 
     async startGame() {
-        UI.hideStartScreen();
-        UI.showLoading('Requesting permissions...');
-
-        // Request orientation permission (iOS)
-        await Controls.requestOrientationPermission();
-
-        // Start camera
-        await this.startCamera();
-
-        // Start GPS
-        UI.showLoading('Finding your location...');
         try {
-            await GPS.start();
+            UI.hideStartScreen();
+            UI.showLoading('Requesting permissions...');
+
+            // Request orientation permission (iOS)
+            try {
+                await Controls.requestOrientationPermission();
+            } catch (e) {
+                console.warn('Orientation permission skipped:', e);
+            }
+
+            // Start camera
+            await this.startCamera();
+
+            // Start GPS
+            UI.showLoading('Finding your location...');
+            try {
+                await GPS.start();
+            } catch (err) {
+                console.warn('GPS failed, using mock location:', err.message);
+                // Mock GPS with a default position so game still works
+                GPS.startPosition = { lat: 40.7128, lon: -74.0060, alt: 0 };
+                GPS.currentPosition = { ...GPS.startPosition };
+                GPS.hasFix = true;
+            }
+
+            // Search landmarks (non-blocking)
+            UI.showLoading('Searching nearby landmarks...');
+            try {
+                this.landmarks = await Landmarks.searchNearby(GPS.currentPosition, 500);
+            } catch (err) {
+                console.warn('Landmark search failed:', err.message);
+                this.landmarks = null;
+            }
+
+            UI.hideLoading();
+            this.startNewHole();
         } catch (err) {
-            UI.showLoading('GPS failed: ' + err.message);
-            console.error('GPS error:', err);
-            return;
+            console.error('startGame error:', err);
+            UI.showLoading('Error: ' + err.message + '. Tap to retry.');
+            // Allow retry on tap
+            const retry = () => {
+                document.body.removeEventListener('click', retry);
+                this.startGame();
+            };
+            document.body.addEventListener('click', retry);
         }
-
-        // Search landmarks
-        UI.showLoading('Searching nearby landmarks...');
-        this.landmarks = await Landmarks.searchNearby(GPS.currentPosition, 500);
-
-        UI.hideLoading();
-        this.startNewHole();
     },
 
     async startCamera() {

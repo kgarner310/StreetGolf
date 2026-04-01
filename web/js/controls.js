@@ -26,7 +26,7 @@ const Controls = {
         body.addEventListener('touchcancel', () => this._onTouchCancel());
 
         // Device orientation for aim direction
-        if (window.DeviceOrientationEvent) {
+        if (typeof DeviceOrientationEvent !== 'undefined') {
             // iOS 13+ requires permission
             if (typeof DeviceOrientationEvent.requestPermission === 'function') {
                 // Permission requested on user gesture (start button)
@@ -37,7 +37,8 @@ const Controls = {
     },
 
     async requestOrientationPermission() {
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        if (typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
             try {
                 const result = await DeviceOrientationEvent.requestPermission();
                 if (result === 'granted') {

@@ -89,7 +89,7 @@ const Game = {
             UI.showLoading('Finding landmarks at ' + this.university.name + '...');
             try {
                 this.landmarks = await Landmarks.searchNearUniversity(
-                    this.university.position, 2000
+                    this.university.position, 5000
                 );
             } catch (err) {
                 console.warn('Landmark search failed:', err);

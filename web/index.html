@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>StreetGolf</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Three.js canvas (full screen arcade view) -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- HUD -->
+    <div id="hud">
+        <div id="hud-top">
+            <span id="hole-number">HOLE 1</span>
+            <span id="hole-name"></span>
+            <span id="par-display">PAR 3</span>
+        </div>
+        <div id="university-banner">
+            <span id="university-name"></span>
+        </div>
+        <div id="hud-center">
+            <div id="distance-display">--</div>
+            <div id="distance-unit">YDS</div>
+            <div id="club-name">Driver</div>
+            <div id="status-text"></div>
+        </div>
+        <div id="aim-reticle" class="hidden">
+            <div class="reticle-h"></div>
+            <div class="reticle-v"></div>
+        </div>
+        <div id="hud-bottom">
+            <div id="stroke-count">Strokes: 0</div>
+            <div id="power-meter-container">
+                <div id="power-meter">
+                    <div id="power-fill"></div>
+                </div>
+                <span id="power-percent">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compass arrow -->
+    <div id="compass-arrow" class="hidden">▲<br><span id="compass-dist"></span></div>
+
+    <!-- Hole complete panel -->
+    <div id="hole-complete" class="hidden">
+        <div id="complete-panel">
+            <div id="score-name">Par</div>
+            <div id="score-strokes">3</div>
+            <div id="score-compare">Even</div>
+            <div id="score-total">Total: 3</div>
+            <div id="score-distance">50m hole</div>
+            <div id="landmark-played"></div>
+            <button id="next-hole-btn">NEXT HOLE</button>
+        </div>
+    </div>
+
+    <!-- Start screen -->
+    <div id="start-screen">
+        <div id="start-content">
+            <h1>STREETGOLF</h1>
+            <div id="start-subtitle">ARCADE CAMPUS EDITION</div>
+            <p>Hit golf balls to real landmarks<br>at your nearest university</p>
+            <button id="start-btn">START GAME</button>
+            <p class="small">Uses your location to find the nearest campus</p>
+            <p id="debug" style="color:#ff6666;font-size:12px;margin-top:10px;"></p>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading" class="hidden">
+        <div id="loading-text">Finding your location...</div>
+        <div class="spinner"></div>
+    </div>
+
+    <script>
+        window.onerror = function(msg, url, line) {
+            var d = document.getElementById('debug');
+            if (d) d.textContent = msg + ' (line ' + line + ')';
+        };
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r158/three.min.js"
+        onerror="document.getElementById('debug').textContent='Three.js CDN failed to load'"></script>
+    <script src="js/gps.js"></script>
+    <script src="js/landmarks.js"></script>
+    <script src="js/physics.js"></script>
+    <script src="js/visuals.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>

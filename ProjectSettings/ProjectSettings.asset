@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!129 &1
+PlayerSettings:
+  productName: StreetGolf
+  companyName: StreetGolf
+  defaultScreenWidth: 1080
+  defaultScreenHeight: 1920
+  defaultScreenOrientation: 1
+  targetDevice: 0
+  useOnDemandResources: 0
+  accelerometerFrequency: 60
+  defaultInterfaceOrientation: 1
+  allowedAutorotateToPortrait: 1
+  allowedAutorotateToPortraitUpsideDown: 0
+  allowedAutorotateToLandscapeRight: 0
+  allowedAutorotateToLandscapeLeft: 0
+  useAnimatedAutorotation: 1
+  bundleIdentifier: com.streetgolf.app
+  bundleVersion: 0.1.0
+  applicationIdentifier:
+    Android: com.streetgolf.app
+    iPhone: com.streetgolf.app
+  minSdkVersion: 28
+  targetSdkVersion: 34
+  iPhoneTargetOSVersionString: 15.0
+  locationUsageDescription: StreetGolf uses your location to create golf holes at your real-world position.
+  cameraUsageDescription: StreetGolf uses your camera for augmented reality gameplay.

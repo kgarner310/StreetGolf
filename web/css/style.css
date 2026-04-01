@@ -1,0 +1,367 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #0a1a0a;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #fff;
+}
+
+/* Three.js canvas — full screen arcade */
+#game-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+    touch-action: none;
+}
+
+/* HUD */
+#hud {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 10;
+    pointer-events: none;
+}
+
+#hud-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 50px 20px 8px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+}
+
+#hole-number {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: #44ffaa;
+}
+
+#hole-name {
+    font-size: 14px;
+    color: #ffd740;
+    max-width: 50%;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#par-display {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #fff;
+}
+
+/* University banner */
+#university-banner {
+    text-align: center;
+    padding: 4px 20px;
+}
+
+#university-name {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #4B9CD3;
+    text-shadow: 0 0 10px rgba(75, 156, 211, 0.5);
+}
+
+#hud-center {
+    text-align: center;
+    margin-top: 15px;
+}
+
+#distance-display {
+    font-size: 56px;
+    font-weight: 800;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.9);
+    color: #fff;
+    letter-spacing: -1px;
+    line-height: 1;
+}
+
+#distance-unit {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #888;
+    margin-top: 2px;
+}
+
+#club-name {
+    font-size: 22px;
+    font-weight: 800;
+    color: #ffd740;
+    margin-top: 8px;
+    letter-spacing: 1px;
+    text-shadow: 0 0 12px rgba(255, 215, 64, 0.4);
+}
+
+#status-text {
+    font-size: 18px;
+    color: #44ffaa;
+    margin-top: 6px;
+    text-shadow: 0 0 10px rgba(68, 255, 170, 0.4);
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+/* Aim reticle — hidden, slingshot controls don't need it */
+#aim-reticle {
+    display: none;
+}
+
+/* Bottom HUD */
+#hud-bottom {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 15px 20px 40px;
+    background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+    pointer-events: auto;
+}
+
+#stroke-count {
+    font-size: 16px;
+    margin-bottom: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+#power-meter-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#power-meter {
+    flex: 1;
+    height: 28px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(68, 255, 170, 0.3);
+}
+
+#power-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #44ffaa, #ffd740, #ff4444);
+    border-radius: 14px;
+    transition: width 0.05s;
+}
+
+#power-percent {
+    font-size: 18px;
+    font-weight: 700;
+    min-width: 45px;
+    text-align: right;
+    color: #44ffaa;
+}
+
+/* Compass arrow — hidden, slingshot controls handle aiming */
+#compass-arrow {
+    display: none;
+}
+
+/* Hole complete panel */
+#hole-complete {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.8);
+}
+
+#hole-complete.hidden { display: none; }
+
+#complete-panel {
+    background: linear-gradient(135deg, rgba(10, 30, 10, 0.95), rgba(10, 10, 20, 0.95));
+    border-radius: 20px;
+    padding: 40px 30px;
+    text-align: center;
+    width: 85%;
+    max-width: 360px;
+    border: 1px solid rgba(68, 255, 170, 0.2);
+    box-shadow: 0 0 40px rgba(68, 255, 170, 0.1);
+}
+
+#score-name {
+    font-size: 38px;
+    font-weight: 800;
+    margin-bottom: 5px;
+    letter-spacing: 2px;
+}
+
+#score-strokes {
+    font-size: 72px;
+    font-weight: 800;
+    line-height: 1;
+    color: #44ffaa;
+}
+
+#score-compare {
+    font-size: 22px;
+    color: #aaa;
+    margin-bottom: 10px;
+}
+
+#score-total, #score-distance {
+    font-size: 14px;
+    color: #888;
+}
+
+#landmark-played {
+    font-size: 15px;
+    color: #ffd740;
+    margin-top: 8px;
+    font-weight: 600;
+}
+
+#next-hole-btn {
+    display: block;
+    width: 100%;
+    margin-top: 25px;
+    padding: 16px;
+    background: linear-gradient(135deg, #44ffaa, #2ecc71);
+    color: #0a1a0a;
+    border: none;
+    border-radius: 12px;
+    font-size: 18px;
+    font-weight: 800;
+    cursor: pointer;
+    pointer-events: auto;
+    letter-spacing: 2px;
+    touch-action: auto;
+}
+
+#next-hole-btn:active {
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    transform: scale(0.97);
+}
+
+/* Start screen — arcade style */
+#start-screen {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, #1a3a1a 0%, #0a1a0a 60%, #050a05 100%);
+}
+
+#start-screen.hidden { display: none; }
+
+#start-content {
+    text-align: center;
+}
+
+#start-screen h1 {
+    font-size: 48px;
+    font-weight: 900;
+    letter-spacing: 6px;
+    margin-bottom: 4px;
+    background: linear-gradient(180deg, #44ffaa, #2ecc71);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+#start-subtitle {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 5px;
+    color: #ffd740;
+    margin-bottom: 30px;
+}
+
+#start-screen p {
+    font-size: 15px;
+    color: #8aaa8a;
+    margin-bottom: 30px;
+    line-height: 1.5;
+}
+
+#start-screen .small {
+    font-size: 11px;
+    color: #555;
+    margin-top: 15px;
+    margin-bottom: 0;
+}
+
+#start-btn {
+    padding: 18px 60px;
+    background: linear-gradient(135deg, #44ffaa, #2ecc71);
+    color: #0a1a0a;
+    border: none;
+    border-radius: 14px;
+    font-size: 22px;
+    font-weight: 800;
+    cursor: pointer;
+    letter-spacing: 3px;
+    touch-action: auto;
+    pointer-events: auto;
+    box-shadow: 0 0 30px rgba(68, 255, 170, 0.3);
+}
+
+#start-btn:active {
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    transform: scale(0.96);
+    box-shadow: 0 0 15px rgba(68, 255, 170, 0.2);
+}
+
+/* Loading */
+#loading {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(5, 10, 5, 0.92);
+}
+
+#loading.hidden { display: none; }
+
+#loading-text {
+    font-size: 18px;
+    margin-bottom: 20px;
+    color: #44ffaa;
+    font-weight: 600;
+}
+
+.spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(68, 255, 170, 0.2);
+    border-top-color: #44ffaa;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Score colors */
+.score-eagle { color: #ffd740; text-shadow: 0 0 20px rgba(255, 215, 64, 0.5); }
+.score-birdie { color: #44ffaa; text-shadow: 0 0 20px rgba(68, 255, 170, 0.5); }
+.score-par { color: #ffffff; }
+.score-bogey { color: #ff8a65; text-shadow: 0 0 20px rgba(255, 138, 101, 0.3); }

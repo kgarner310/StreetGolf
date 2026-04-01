@@ -62,8 +62,9 @@
     <div id="start-screen">
         <h1>⛳ StreetGolf</h1>
         <p>Play golf at real landmarks around you</p>
-        <button id="start-btn">START GAME</button>
+        <button id="start-btn" onclick="Game.startGame().catch(e => document.getElementById('debug').textContent = e.message)">START GAME</button>
         <p class="small">Requires camera & location access</p>
+        <p id="debug" style="color:#ff6666;font-size:12px;margin-top:10px;"></p>
     </div>
 
     <!-- Loading overlay -->
@@ -72,7 +73,14 @@
         <div class="spinner"></div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r158/three.min.js"></script>
+    <script>
+        window.onerror = function(msg, url, line) {
+            var d = document.getElementById('debug');
+            if (d) d.textContent = msg + ' (line ' + line + ')';
+        };
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r158/three.min.js"
+        onerror="document.getElementById('debug').textContent='Three.js CDN failed to load'"></script>
     <script src="js/gps.js"></script>
     <script src="js/landmarks.js"></script>
     <script src="js/physics.js"></script>

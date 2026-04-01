@@ -13,22 +13,33 @@ const Game = {
     SETTLE_DELAY: 1500,
 
     async init() {
-        UI.init();
-        Controls.init();
-        Visuals.init();
+        try {
+            UI.init();
+            Controls.init();
+            Visuals.init();
 
-        // Wire controls
-        Controls.onShot = (dx, dz, power, angle) => this.onShot(dx, dz, power, angle);
-        Controls.onPowerChange = (p) => this.onPowerChange(p);
+            // Wire controls
+            Controls.onShot = (dx, dz, power, angle) => this.onShot(dx, dz, power, angle);
+            Controls.onPowerChange = (p) => this.onPowerChange(p);
 
-        // Wire next hole button
-        UI.els.nextHoleBtn.addEventListener('click', () => this.nextHole());
+            // Wire next hole button
+            UI.els.nextHoleBtn.addEventListener('click', () => this.nextHole());
 
-        // Wire start button
-        UI.els.startBtn.addEventListener('click', () => this.startGame());
+            // Wire start button (also backed up by inline onclick in HTML)
+            UI.els.startBtn.addEventListener('click', () => {
+                this.startGame().catch(e => {
+                    var d = document.getElementById('debug');
+                    if (d) d.textContent = e.message;
+                });
+            });
 
-        UI.showStartScreen();
-        this.loop();
+            UI.showStartScreen();
+            this.loop();
+        } catch (e) {
+            console.error('Init error:', e);
+            var d = document.getElementById('debug');
+            if (d) d.textContent = 'Init: ' + e.message;
+        }
     },
 
     async startGame() {

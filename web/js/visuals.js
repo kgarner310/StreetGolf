@@ -42,7 +42,8 @@ const Visuals = {
             if (typeof THREE === 'undefined') { console.error('Three.js not loaded'); return; }
 
             this.scene = new THREE.Scene();
-            this.scene.fog = new THREE.FogExp2(0x1a2a1a, 0.00015);
+            // Light sky-blue background so scene is clearly visible
+            this.scene.background = new THREE.Color(0x87CEEB);
 
             // Camera
             this.camera = new THREE.PerspectiveCamera(
@@ -59,14 +60,16 @@ const Visuals = {
             }
             this.renderer.setSize(window.innerWidth, window.innerHeight);
             this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            this.renderer.setClearColor(0x0a1a0a, 1);
+            this.renderer.setClearColor(0x87CEEB, 1);
 
-            // Lighting
-            this.scene.add(new THREE.AmbientLight(0x445544, 1.0));
-            const sun = new THREE.DirectionalLight(0xffeedd, 1.0);
-            sun.position.set(100, 200, 50);
+            // Bright lighting so everything is clearly visible
+            this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+            sun.position.set(200, 400, 100);
             this.scene.add(sun);
-            this.scene.add(new THREE.DirectionalLight(0x4488ff, 0.3));
+            const fill = new THREE.DirectionalLight(0x88bbff, 0.4);
+            fill.position.set(-100, 200, -50);
+            this.scene.add(fill);
 
             // Create world — each wrapped so one failure doesn't kill all
             try { this._createCampusGround(); } catch(e) { console.warn('ground:', e); }
@@ -87,7 +90,7 @@ const Visuals = {
         // Main grass ground — large area covering 600yd holes
         const groundGeo = new THREE.PlaneGeometry(3000, 3000, 20, 20);
         const groundMat = new THREE.MeshStandardMaterial({
-            color: 0x1a5c2a,
+            color: 0x4CAF50,
             roughness: 0.9,
             metalness: 0.0
         });
@@ -98,8 +101,8 @@ const Visuals = {
         this.scene.add(this.campusGround);
 
         // Subtle grid lines for arcade feel
-        const gridHelper = new THREE.GridHelper(3000, 60, 0x1a6630, 0x1a6630);
-        gridHelper.material.opacity = 0.15;
+        const gridHelper = new THREE.GridHelper(3000, 60, 0x388E3C, 0x388E3C);
+        gridHelper.material.opacity = 0.3;
         gridHelper.material.transparent = true;
         gridHelper.position.y = 0.05;
         this.scene.add(gridHelper);
@@ -133,7 +136,7 @@ const Visuals = {
     _addPath(x, z, length, width, rotation) {
         const geo = new THREE.PlaneGeometry(width, length);
         const mat = new THREE.MeshStandardMaterial({
-            color: 0xc4a882,
+            color: 0xD2B48C,
             roughness: 0.95
         });
         const path = new THREE.Mesh(geo, mat);
@@ -240,7 +243,7 @@ const Visuals = {
         // Putting green — larger for arcade style
         const greenGeo = new THREE.CylinderGeometry(12, 12, 0.3, 32);
         const greenMat = new THREE.MeshStandardMaterial({
-            color: 0x2ecc40,
+            color: 0x81C784,
             roughness: 0.6
         });
         this.green = new THREE.Mesh(greenGeo, greenMat);
@@ -541,10 +544,8 @@ const Visuals = {
 
         const fwGeo = new THREE.PlaneGeometry(18, dist + 30);
         const fwMat = new THREE.MeshStandardMaterial({
-            color: 0x228B22,
-            roughness: 0.8,
-            transparent: true,
-            opacity: 0.6
+            color: 0x66BB6A,
+            roughness: 0.8
         });
         this.fairway = new THREE.Mesh(fwGeo, fwMat);
         this.fairway.rotation.x = -Math.PI / 2;
@@ -806,7 +807,7 @@ const Visuals = {
         this.routeFairwayGroup = new THREE.Group();
 
         // Road surface — thick line segments as quads
-        const roadWidth = 14;
+        const roadWidth = 22;
         for (let i = 0; i < routePoints.length - 1; i++) {
             const p0 = routePoints[i];
             const p1 = routePoints[i + 1];
@@ -819,10 +820,8 @@ const Visuals = {
 
             const segGeo = new THREE.PlaneGeometry(roadWidth, segLen);
             const segMat = new THREE.MeshStandardMaterial({
-                color: 0x444444,
-                roughness: 0.9,
-                transparent: true,
-                opacity: 0.7
+                color: 0x555555,
+                roughness: 0.9
             });
             const seg = new THREE.Mesh(segGeo, segMat);
             seg.rotation.x = -Math.PI / 2;
@@ -841,9 +840,7 @@ const Visuals = {
                 for (const side of [-1, 1]) {
                     const edgeGeo = new THREE.PlaneGeometry(1.5, Math.min(segLen, 8));
                     const edgeMat = new THREE.MeshBasicMaterial({
-                        color: 0xffdd00,
-                        transparent: true,
-                        opacity: 0.5
+                        color: 0xffdd00
                     });
                     const edge = new THREE.Mesh(edgeGeo, edgeMat);
                     edge.rotation.x = -Math.PI / 2;
@@ -861,9 +858,7 @@ const Visuals = {
             if (i % 4 === 0) {
                 const centerGeo = new THREE.PlaneGeometry(1, Math.min(segLen, 6));
                 const centerMat = new THREE.MeshBasicMaterial({
-                    color: 0xffffff,
-                    transparent: true,
-                    opacity: 0.4
+                    color: 0xffffff
                 });
                 const center = new THREE.Mesh(centerGeo, centerMat);
                 center.rotation.x = -Math.PI / 2;

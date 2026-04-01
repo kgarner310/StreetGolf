@@ -95,15 +95,15 @@ const Game = {
 
             // Update start info
             UI.setUniversityName(this.university.name);
+            this.holeNumber = 0; // Reset before first hole
+            this.totalStrokes = 0;
             this.startNewHole();
         } catch (err) {
             console.error('startGame error:', err);
-            UI.showLoading('Error: ' + err.message + '. Tap to retry.');
-            const retry = () => {
-                document.body.removeEventListener('click', retry);
-                this.startGame();
-            };
-            document.body.addEventListener('click', retry);
+            UI.showLoading('Error: ' + err.message);
+            // Show on debug element too
+            var d = document.getElementById('debug');
+            if (d) d.textContent = err.message;
         }
     },
 

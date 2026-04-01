@@ -38,7 +38,7 @@ const Visuals = {
         this.scene = new THREE.Scene();
         this.scene.fog = new THREE.FogExp2(0x1a2a1a, 0.0015);
 
-        // Camera — top-down arcade view
+        // Camera — top-down arcade view (create FIRST)
         this.camera = new THREE.PerspectiveCamera(
             50, window.innerWidth / window.innerHeight, 0.1, 2000
         );
@@ -53,36 +53,25 @@ const Visuals = {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setClearColor(0x0a1a0a, 1);
-        this.renderer.shadowMap.enabled = true;
 
-        // Lighting — dramatic arcade style
-        const ambient = new THREE.AmbientLight(0x334433, 0.8);
+        // Lighting
+        const ambient = new THREE.AmbientLight(0x445544, 1.0);
         this.scene.add(ambient);
 
-        const sun = new THREE.DirectionalLight(0xffeedd, 1.2);
+        const sun = new THREE.DirectionalLight(0xffeedd, 1.0);
         sun.position.set(100, 200, 50);
-        sun.castShadow = true;
-        sun.shadow.mapSize.width = 1024;
-        sun.shadow.mapSize.height = 1024;
-        sun.shadow.camera.near = 10;
-        sun.shadow.camera.far = 600;
-        sun.shadow.camera.left = -300;
-        sun.shadow.camera.right = 300;
-        sun.shadow.camera.top = 300;
-        sun.shadow.camera.bottom = -300;
         this.scene.add(sun);
 
-        // Soft fill light
         const fill = new THREE.DirectionalLight(0x4488ff, 0.3);
         fill.position.set(-50, 100, -50);
         this.scene.add(fill);
 
-        // Create world
-        this._createCampusGround();
-        this._createBall();
-        this._createHole();
-        this._createAimLine();
-        this._createCourseLine();
+        // Create world — each wrapped so one failure doesn't kill all
+        try { this._createCampusGround(); } catch(e) { console.warn('ground:', e); }
+        try { this._createBall(); } catch(e) { console.warn('ball:', e); }
+        try { this._createHole(); } catch(e) { console.warn('hole:', e); }
+        try { this._createAimLine(); } catch(e) { console.warn('aim:', e); }
+        try { this._createCourseLine(); } catch(e) { console.warn('line:', e); }
 
         window.addEventListener('resize', () => this._onResize());
     },
@@ -475,14 +464,16 @@ const Visuals = {
     updateBall(x, y, z) {
         if (!this.ball) return;
         this.ball.position.set(x, y + 1.5, z);
-        this.ballGlow.position.set(x, 0.1, z);
-        this.ballShadow.position.set(x, 0.05, z);
+        if (this.ballGlow) this.ballGlow.position.set(x, 0.1, z);
+        if (this.ballShadow) this.ballShadow.position.set(x, 0.05, z);
         if (this.playerLabel) this.playerLabel.position.set(x, y + 10, z);
 
         // Scale shadow based on height
-        const shadowScale = Math.max(0.5, 1 - y / 50);
-        this.ballShadow.scale.set(shadowScale, shadowScale, 1);
-        this.ballShadow.material.opacity = 0.3 * shadowScale;
+        if (this.ballShadow) {
+            const shadowScale = Math.max(0.5, 1 - y / 50);
+            this.ballShadow.scale.set(shadowScale, shadowScale, 1);
+            this.ballShadow.material.opacity = 0.3 * shadowScale;
+        }
 
         // Trail
         if (BallPhysics.state === 'flight' || BallPhysics.state === 'rolling') {
@@ -600,6 +591,7 @@ const Visuals = {
     },
 
     showAimLine(ballPos, dirX, dirZ, power) {
+        if (!this.aimLine || !this.landingMarker) return;
         if (power < 0.05) {
             this.aimLine.visible = false;
             this.landingMarker.visible = false;
@@ -662,13 +654,13 @@ const Visuals = {
 
     // Intro camera animation: sweeps from player to hole
     startIntroAnimation(ballPos, holePos) {
+        if (!this.camera) { this.introAnimating = false; return; }
         this.introAnimating = true;
         this.introPhase = 0;
         this.introTimer = 0;
         this.introBallPos = { ...ballPos };
         this.introHolePos = { ...holePos };
 
-        // Start camera over player
         const dist = Math.sqrt(
             (holePos.x - ballPos.x) ** 2 + (holePos.z - ballPos.z) ** 2
         );
@@ -678,7 +670,7 @@ const Visuals = {
     },
 
     updateIntroAnimation(dt) {
-        if (!this.introAnimating) return false;
+        if (!this.introAnimating || !this.camera) return true; // return done
 
         this.introTimer += dt;
         const bp = this.introBallPos;

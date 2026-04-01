@@ -27,6 +27,21 @@ namespace StreetGolf.UI
         [SerializeField] private Color parColor = Color.white;
         [SerializeField] private Color bogeyColor = new Color(1f, 0.5f, 0.2f);
 
+        public void Initialize(
+            GameObject panelObj, TextMeshProUGUI scoreName, TextMeshProUGUI strokes,
+            TextMeshProUGUI parCompare, TextMeshProUGUI totalStrokes, TextMeshProUGUI distance,
+            Button nextHole, Button share)
+        {
+            panel = panelObj;
+            scoreNameText = scoreName;
+            strokesText = strokes;
+            parCompareText = parCompare;
+            totalStrokesText = totalStrokes;
+            distanceText = distance;
+            nextHoleButton = nextHole;
+            shareButton = share;
+        }
+
         private void Start()
         {
             if (panel != null)

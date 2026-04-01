@@ -40,6 +40,11 @@ namespace StreetGolf.Golf
             Instance = this;
         }
 
+        public void Initialize(GolfBall golfBall)
+        {
+            ball = golfBall;
+        }
+
         public void EnableShooting()
         {
             CanShoot = true;

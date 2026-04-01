@@ -17,6 +17,11 @@ namespace StreetGolf.UI
         private GolfBall ball;
         private HoleTarget hole;
 
+        public void Initialize(Transform visual)
+        {
+            arrowVisual = visual;
+        }
+
         private void Start()
         {
             ball = GolfBall.Instance;

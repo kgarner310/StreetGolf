@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using StreetGolf.GPS;
+using StreetGolf.Visual;
 
 namespace StreetGolf.Golf
 {
@@ -31,9 +32,21 @@ namespace StreetGolf.Golf
 
         private GolfBall ball;
 
+        public string LandmarkName { get; set; }
+
+        private Visual.PulseEffect pulseEffect;
+
         private void Awake()
         {
             Instance = this;
+        }
+
+        public void Initialize(GameObject flagPrefab, GameObject indicator, LineRenderer line)
+        {
+            holeFlagPrefab = flagPrefab;
+            holeIndicator = indicator;
+            directionLine = line;
+            pulseEffect = indicator != null ? indicator.GetComponent<Visual.PulseEffect>() : null;
         }
 
         /// <summary>
@@ -78,6 +91,9 @@ namespace StreetGolf.Golf
             DistanceFromBall = Vector3.Distance(
                 new Vector3(ball.Position.x, 0, ball.Position.z),
                 new Vector3(transform.position.x, 0, transform.position.z));
+
+            if (pulseEffect != null)
+                pulseEffect.CurrentDistance = DistanceFromBall;
 
             UpdateDirectionIndicator();
             CheckBallInHole();

@@ -1,9 +1,11 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using StreetGolf.AR;
 using StreetGolf.Golf;
 using StreetGolf.GPS;
+using StreetGolf.UI;
 
 namespace StreetGolf.Core
 {
@@ -11,7 +13,7 @@ namespace StreetGolf.Core
     /// Main game flow controller. Manages the lifecycle of a street golf hole:
     /// 1. Player opens app at their location
     /// 2. AR detects the ground, ball is placed at their feet
-    /// 3. A hole/target is generated nearby using GPS
+    /// 3. Nearby landmarks are searched — one becomes the hole target
     /// 4. Player aims by pointing phone, swipes to hit
     /// 5. Repeat until ball reaches the hole
     /// 6. Score the hole, generate next one
@@ -32,11 +34,24 @@ namespace StreetGolf.Core
 
         [Header("Settings")]
         [SerializeField] private float shotSettleDelay = 1.5f;
+        [SerializeField] private float landmarkSearchTimeout = 8f;
+        [SerializeField] private float landmarkSearchRadius = 500f;
 
         public GameState CurrentState { get; private set; } = GameState.Initializing;
         public int CurrentHoleNumber { get; private set; }
         public int TotalStrokes { get; private set; }
         public HoleResult LastResult { get; private set; }
+        public HoleConfig CurrentHoleConfig { get; private set; }
+
+        private List<Landmark> cachedLandmarks;
+
+        public void Initialize(GolfBall b, HoleTarget h, ShotController sc, HoleGenerator hg)
+        {
+            ball = b;
+            hole = h;
+            shotController = sc;
+            holeGenerator = hg;
+        }
 
         private void Awake()
         {
@@ -63,6 +78,10 @@ namespace StreetGolf.Core
             while (!GPSLocationService.Instance.HasFix)
                 yield return new WaitForSeconds(0.5f);
 
+            // Search for nearby landmarks while waiting for AR
+            SetState(GameState.SearchingLandmark);
+            yield return StartCoroutine(FetchLandmarks());
+
             // Wait for AR ground detection
             SetState(GameState.DetectingSurface);
             while (!ARSurfaceManager.Instance.HasDetectedGround)
@@ -70,6 +89,34 @@ namespace StreetGolf.Core
 
             // Ready to play
             StartNewHole();
+        }
+
+        private IEnumerator FetchLandmarks()
+        {
+            if (LandmarkService.Instance == null)
+                yield break;
+
+            bool done = false;
+            LandmarkService.Instance.SearchNearby(
+                GPSLocationService.Instance.CurrentPosition,
+                landmarkSearchRadius,
+                results =>
+                {
+                    cachedLandmarks = results;
+                    done = true;
+                });
+
+            float elapsed = 0f;
+            while (!done && elapsed < landmarkSearchTimeout)
+            {
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            if (cachedLandmarks != null)
+                Debug.Log($"StreetGolf: {cachedLandmarks.Count} landmarks found nearby");
+            else
+                Debug.Log("StreetGolf: No landmarks found, using random holes");
         }
 
         public void StartNewHole()
@@ -92,12 +139,18 @@ namespace StreetGolf.Core
                 ball.PlaceAt(camPos + camForward * 1f + Vector3.down * camPos.y);
             }
 
-            // Generate a hole target nearby
-            HoleConfig holeConfig = holeGenerator.GenerateHole(
-                GPSLocationService.Instance.CurrentPosition, CurrentHoleNumber);
+            // Try landmark-based hole, fall back to random
+            HoleConfig holeConfig = GenerateHoleConfig();
+            CurrentHoleConfig = holeConfig;
 
             hole.SetTarget(holeConfig.TargetPosition, holeConfig.Par);
+            hole.LandmarkName = holeConfig.HoleName;
             hole.SetBallReference(ball);
+
+            // Update distance banner with landmark name
+            var banner = FindFirstObjectByType<DistanceBanner>();
+            if (banner != null)
+                banner.SetLandmarkName(holeConfig.HoleName);
 
             // Subscribe to events
             ball.OnBallResting -= OnBallSettled;
@@ -109,6 +162,26 @@ namespace StreetGolf.Core
             shotController.EnableShooting();
 
             OnHoleStarted?.Invoke(CurrentHoleNumber);
+        }
+
+        private HoleConfig GenerateHoleConfig()
+        {
+            var playerPos = GPSLocationService.Instance.CurrentPosition;
+
+            // Try to use a real landmark
+            if (cachedLandmarks != null && LandmarkService.Instance != null)
+            {
+                var landmark = LandmarkService.Instance.SelectForHole(
+                    CurrentHoleNumber, cachedLandmarks);
+
+                if (landmark.HasValue)
+                {
+                    return holeGenerator.GenerateHoleFromLandmark(playerPos, landmark.Value);
+                }
+            }
+
+            // Fallback to random generation
+            return holeGenerator.GenerateHole(playerPos, CurrentHoleNumber);
         }
 
         private void OnBallSettled()
@@ -136,8 +209,9 @@ namespace StreetGolf.Core
                 HoleNumber = CurrentHoleNumber,
                 Strokes = ball.ShotCount,
                 Par = hole.Par,
-                DistanceMeters = GPSLocationService.Instance.DistanceTo(hole.TargetGPSPosition),
-                ScoreName = GetScoreName(ball.ShotCount, hole.Par)
+                DistanceMeters = CurrentHoleConfig.DistanceMeters,
+                ScoreName = GetScoreName(ball.ShotCount, hole.Par),
+                LandmarkName = hole.LandmarkName
             };
 
             TotalStrokes += ball.ShotCount;
@@ -170,6 +244,7 @@ namespace StreetGolf.Core
     public enum GameState
     {
         Initializing,
+        SearchingLandmark,
         DetectingSurface,
         PlacingBall,
         Aiming,
@@ -187,5 +262,6 @@ namespace StreetGolf.Core
         public int Par;
         public float DistanceMeters;
         public string ScoreName;
+        public string LandmarkName;
     }
 }

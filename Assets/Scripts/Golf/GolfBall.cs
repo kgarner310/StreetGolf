@@ -50,6 +50,12 @@ namespace StreetGolf.Golf
             Instance = this;
         }
 
+        public void Initialize(GameObject mesh, TrailRenderer trailRenderer)
+        {
+            ballMesh = mesh;
+            trail = trailRenderer;
+        }
+
         public void PlaceAt(Vector3 position)
         {
             transform.position = position;

@@ -25,6 +25,12 @@ namespace StreetGolf.AR
         private Transform followTarget;
         private Vector3 followVelocity;
 
+        public void Initialize(ARCameraManager camManager, Camera cam)
+        {
+            arCameraManager = camManager;
+            arCamera = cam;
+        }
+
         public enum CameraMode
         {
             AR,         // Normal AR passthrough — player aims by pointing phone

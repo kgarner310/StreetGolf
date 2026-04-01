@@ -23,6 +23,14 @@ namespace StreetGolf.UI
         private GolfBall ball;
         private HoleTarget hole;
 
+        public void Initialize(RectTransform container, RectTransform ballIcn, RectTransform holeIcn, RectTransform playerIcn)
+        {
+            mapContainer = container;
+            ballIcon = ballIcn;
+            holeIcon = holeIcn;
+            playerIcon = playerIcn;
+        }
+
         private void Start()
         {
             ball = GolfBall.Instance;

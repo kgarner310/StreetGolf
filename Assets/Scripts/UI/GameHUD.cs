@@ -38,6 +38,23 @@ namespace StreetGolf.UI
         private ShotController shotController;
         private GameManager gameManager;
 
+        public void Initialize(
+            TextMeshProUGUI holeNum, TextMeshProUGUI holeName, TextMeshProUGUI par,
+            TextMeshProUGUI distance, TextMeshProUGUI status, GameObject reticle,
+            TextMeshProUGUI strokes, Slider power, Image fill, TextMeshProUGUI powerPct)
+        {
+            holeNumberText = holeNum;
+            holeNameText = holeName;
+            parText = par;
+            distanceText = distance;
+            statusText = status;
+            aimReticle = reticle;
+            strokeCountText = strokes;
+            powerMeter = power;
+            powerFill = fill;
+            powerPercentText = powerPct;
+        }
+
         private void Start()
         {
             gameManager = GameManager.Instance;
@@ -85,6 +102,9 @@ namespace StreetGolf.UI
 
             if (parText != null && hole != null)
                 parText.text = $"PAR {hole.Par}";
+
+            if (holeNameText != null && hole != null)
+                holeNameText.text = hole.LandmarkName ?? "";
         }
 
         private void OnGameStateChanged(GameState state)
@@ -97,6 +117,10 @@ namespace StreetGolf.UI
 
                 case GameState.DetectingSurface:
                     SetStatus("Point your phone at the ground");
+                    break;
+
+                case GameState.SearchingLandmark:
+                    SetStatus("Finding nearby landmark...");
                     break;
 
                 case GameState.PlacingBall:

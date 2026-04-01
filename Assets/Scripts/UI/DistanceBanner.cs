@@ -11,11 +11,24 @@ namespace StreetGolf.UI
     public class DistanceBanner : MonoBehaviour
     {
         [SerializeField] private TextMeshPro distanceLabel;
+        [SerializeField] private TextMeshPro landmarkNameLabel;
         [SerializeField] private float displayDistance = 50f;
 
         private HoleTarget hole;
         private GolfBall ball;
         private Camera mainCam;
+
+        public void Initialize(TextMeshPro distance, TextMeshPro landmarkName)
+        {
+            distanceLabel = distance;
+            landmarkNameLabel = landmarkName;
+        }
+
+        public void SetLandmarkName(string name)
+        {
+            if (landmarkNameLabel != null)
+                landmarkNameLabel.text = name ?? "";
+        }
 
         private void Start()
         {
@@ -41,9 +54,7 @@ namespace StreetGolf.UI
             // Update text
             float dist = hole.DistanceFromBall;
             if (distanceLabel != null)
-            {
                 distanceLabel.text = $"{dist:F0}m";
-            }
 
             // Scale based on distance so it's readable
             float scale = Mathf.Clamp(dist / displayDistance, 0.5f, 3f);

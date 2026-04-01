@@ -26,6 +26,13 @@ namespace StreetGolf.AR
 
         private List<ARRaycastHit> raycastHits = new List<ARRaycastHit>();
 
+        public void Initialize(ARPlaneManager planes, ARRaycastManager raycasts, ARSession session)
+        {
+            planeManager = planes;
+            raycastManager = raycasts;
+            arSession = session;
+        }
+
         private void Awake()
         {
             if (Instance != null)

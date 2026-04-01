@@ -85,6 +85,18 @@ namespace StreetGolf.Core
             };
         }
 
+        /// <summary>
+        /// Generate a hole from a real-world landmark (POI).
+        /// The landmark name becomes the hole name.
+        /// </summary>
+        public HoleConfig GenerateHoleFromLandmark(GPSPosition playerPosition, Landmark landmark)
+        {
+            var config = GenerateHoleAtTarget(playerPosition, landmark.Position);
+            config.HoleName = landmark.Name;
+            config.LandmarkCategory = landmark.Category;
+            return config;
+        }
+
         private string GenerateHoleName(int holeNumber)
         {
             string[] streetNames = {
@@ -121,5 +133,6 @@ namespace StreetGolf.Core
         public float DistanceMeters;
         public float Bearing;
         public string HoleName;
+        public string LandmarkCategory;
     }
 }

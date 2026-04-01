@@ -3,39 +3,23 @@ using UnityEngine;
 namespace StreetGolf.Core
 {
     /// <summary>
-    /// Bootstraps the main game scene. Ensures all required managers exist
-    /// and initializes them in the correct order.
-    /// Attach this to an empty GameObject in the main scene.
+    /// Legacy bootstrap — superseded by RuntimeSceneBuilder which constructs the
+    /// entire scene at runtime. Kept as a lightweight fallback entry point.
     /// </summary>
     public class SceneBootstrap : MonoBehaviour
     {
-        [Header("Manager Prefabs (assign in inspector)")]
-        [SerializeField] private GameObject gpsServicePrefab;
-        [SerializeField] private GameObject soundManagerPrefab;
-        [SerializeField] private GameObject gameManagerPrefab;
-
         private void Awake()
         {
+            // RuntimeSceneBuilder handles everything now.
+            // If no RuntimeSceneBuilder exists, this is a manual scene setup.
+            if (FindFirstObjectByType<RuntimeSceneBuilder>() != null)
+                return;
+
             Application.targetFrameRate = 60;
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
             Input.multiTouchEnabled = false;
-        }
 
-        private void Start()
-        {
-            // Ensure persistent managers exist
-            EnsureManager<GPS.GPSLocationService>(gpsServicePrefab);
-            EnsureManager<Utils.SoundManager>(soundManagerPrefab);
-
-            Debug.Log("StreetGolf: Scene initialized. Ready to play.");
-        }
-
-        private void EnsureManager<T>(GameObject prefab) where T : MonoBehaviour
-        {
-            if (FindFirstObjectByType<T>() == null && prefab != null)
-            {
-                Instantiate(prefab);
-            }
+            Debug.Log("StreetGolf: SceneBootstrap fallback active. Use RuntimeSceneBuilder for full setup.");
         }
     }
 }

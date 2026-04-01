@@ -25,6 +25,14 @@ namespace StreetGolf.Golf
 
         private bool isActive;
 
+        public void Initialize(LineRenderer line, Transform marker, ShotController shot, GolfBall golfBall)
+        {
+            aimLine = line;
+            landingMarker = marker;
+            shotController = shot;
+            ball = golfBall;
+        }
+
         public void Show()
         {
             isActive = true;

@@ -10,10 +10,7 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <!-- Camera video background -->
-    <video id="camera-feed" autoplay playsinline muted></video>
-
-    <!-- Three.js canvas overlay -->
+    <!-- Three.js canvas (full screen arcade view) -->
     <canvas id="game-canvas"></canvas>
 
     <!-- HUD -->
@@ -23,11 +20,14 @@
             <span id="hole-name"></span>
             <span id="par-display">PAR 3</span>
         </div>
+        <div id="university-banner">
+            <span id="university-name"></span>
+        </div>
         <div id="hud-center">
             <div id="distance-display">--</div>
-            <div id="status-text">Tap to start</div>
+            <div id="status-text"></div>
         </div>
-        <div id="aim-reticle">
+        <div id="aim-reticle" class="hidden">
             <div class="reticle-h"></div>
             <div class="reticle-v"></div>
         </div>
@@ -42,7 +42,7 @@
         </div>
     </div>
 
-    <!-- Compass arrow (CSS) -->
+    <!-- Compass arrow -->
     <div id="compass-arrow" class="hidden">▲<br><span id="compass-dist"></span></div>
 
     <!-- Hole complete panel -->
@@ -60,11 +60,14 @@
 
     <!-- Start screen -->
     <div id="start-screen">
-        <h1>⛳ StreetGolf</h1>
-        <p>Play golf at real landmarks around you</p>
-        <button id="start-btn" onclick="Game.startGame().catch(e => document.getElementById('debug').textContent = e.message)">START GAME</button>
-        <p class="small">Requires camera & location access</p>
-        <p id="debug" style="color:#ff6666;font-size:12px;margin-top:10px;"></p>
+        <div id="start-content">
+            <h1>STREETGOLF</h1>
+            <div id="start-subtitle">ARCADE CAMPUS EDITION</div>
+            <p>Hit golf balls to real landmarks<br>at your nearest university</p>
+            <button id="start-btn" onclick="Game.startGame().catch(e => document.getElementById('debug').textContent = e.message)">START GAME</button>
+            <p class="small">Uses your location to find the nearest campus</p>
+            <p id="debug" style="color:#ff6666;font-size:12px;margin-top:10px;"></p>
+        </div>
     </div>
 
     <!-- Loading overlay -->

@@ -1,15 +1,15 @@
-// Main Game Loop
-// Ties everything together: GPS → landmarks → 3D → physics → scoring
+// Main Game Loop — Arcade Street Golf
+// GPS → find nearest university → 3D arcade view → physics → scoring
 
 const Game = {
-    state: 'start', // start, loading, searching, aiming, flight, settling, complete
+    state: 'start', // start, loading, searching, intro, aiming, flight, settling, complete
     holeNumber: 0,
     totalStrokes: 0,
-    landmarks: null,
-    currentHole: null,  // { position: GPS, localPos: {x,z}, name, par, distance }
+    currentHole: null,
     holeLocalPos: { x: 0, z: 0 },
+    university: null, // nearest university/college
 
-    SINK_RADIUS: 0.5,
+    SINK_RADIUS: 3,
     SETTLE_DELAY: 1500,
 
     async init() {
@@ -18,14 +18,10 @@ const Game = {
             Controls.init();
             Visuals.init();
 
-            // Wire controls
             Controls.onShot = (dx, dz, power, angle) => this.onShot(dx, dz, power, angle);
             Controls.onPowerChange = (p) => this.onPowerChange(p);
 
-            // Wire next hole button
             UI.els.nextHoleBtn.addEventListener('click', () => this.nextHole());
-
-            // Wire start button (also backed up by inline onclick in HTML)
             UI.els.startBtn.addEventListener('click', () => {
                 this.startGame().catch(e => {
                     var d = document.getElementById('debug');
@@ -47,43 +43,62 @@ const Game = {
             UI.hideStartScreen();
             UI.showLoading('Requesting permissions...');
 
-            // Request orientation permission (iOS)
             try {
                 await Controls.requestOrientationPermission();
             } catch (e) {
                 console.warn('Orientation permission skipped:', e);
             }
 
-            // Start camera
-            await this.startCamera();
-
+            // No camera needed — arcade top-down view
             // Start GPS
             UI.showLoading('Finding your location...');
             try {
                 await GPS.start();
             } catch (err) {
-                console.warn('GPS failed, using mock location:', err.message);
-                // Mock GPS with a default position so game still works
-                GPS.startPosition = { lat: 40.7128, lon: -74.0060, alt: 0 };
+                console.warn('GPS failed, using Chapel Hill:', err.message);
+                // Default: UNC Chapel Hill campus
+                GPS.startPosition = { lat: 35.9080, lon: -79.0520, alt: 0 };
                 GPS.currentPosition = { ...GPS.startPosition };
                 GPS.hasFix = true;
             }
 
-            // Search landmarks (non-blocking)
-            UI.showLoading('Searching nearby landmarks...');
+            // Find nearest university
+            UI.showLoading('Finding nearest university...');
             try {
-                this.landmarks = await Landmarks.searchNearby(GPS.currentPosition, 500);
+                this.university = await Landmarks.findNearestUniversity(GPS.currentPosition);
             } catch (err) {
-                console.warn('Landmark search failed:', err.message);
+                console.warn('University search failed:', err.message);
+            }
+
+            if (!this.university) {
+                // Fallback: default university
+                this.university = {
+                    name: 'UNC Chapel Hill',
+                    position: { lat: 35.9101, lon: -79.0510, alt: 0 },
+                    distance: GPS.distanceBetween(GPS.currentPosition,
+                        { lat: 35.9101, lon: -79.0510 })
+                };
+            }
+
+            // Search for POIs near the university to use as holes
+            UI.showLoading('Setting up ' + this.university.name + '...');
+            try {
+                this.landmarks = await Landmarks.searchNearUniversity(
+                    this.university.position, 800
+                );
+            } catch (err) {
+                console.warn('Landmark search failed:', err);
                 this.landmarks = null;
             }
 
             UI.hideLoading();
+
+            // Update start info
+            UI.setUniversityName(this.university.name);
             this.startNewHole();
         } catch (err) {
             console.error('startGame error:', err);
             UI.showLoading('Error: ' + err.message + '. Tap to retry.');
-            // Allow retry on tap
             const retry = () => {
                 document.body.removeEventListener('click', retry);
                 this.startGame();
@@ -92,28 +107,15 @@ const Game = {
         }
     },
 
-    async startCamera() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-                audio: false
-            });
-            document.getElementById('camera-feed').srcObject = stream;
-        } catch (err) {
-            console.warn('Camera not available:', err.message);
-            // Game still works without camera, just no AR background
-        }
-    },
-
     startNewHole() {
         this.holeNumber++;
         BallPhysics.reset();
 
-        // Place ball at origin (player's current position)
+        // Place ball at player position
         const playerLocal = GPS.toLocal(GPS.currentPosition);
         BallPhysics.placeAt(playerLocal.x, 0, playerLocal.z);
 
-        // Find hole target
+        // Generate hole
         this.currentHole = this.generateHole();
 
         // Convert hole GPS to local coords
@@ -123,6 +125,10 @@ const Game = {
         // Set up 3D
         Visuals.setHolePosition(holeLocal.x, holeLocal.z);
         Visuals.updateBall(playerLocal.x, 0, playerLocal.z);
+        Visuals.updateCourseLine(
+            { x: playerLocal.x, z: playerLocal.z },
+            { x: holeLocal.x, z: holeLocal.z }
+        );
 
         // Auto-aim toward hole
         Controls.setAimToward(holeLocal.x, holeLocal.z, playerLocal.x, playerLocal.z);
@@ -131,61 +137,54 @@ const Game = {
         UI.setHoleInfo(this.holeNumber, this.currentHole.name, this.currentHole.par);
         UI.setDistance(this.currentHole.distance);
         UI.setStrokes(0);
-        UI.setStatus('Swipe up to hit');
-        UI.showReticle();
-        UI.showCompass(0, this.currentHole.distance);
 
-        this.state = 'aiming';
-        Controls.enableShooting();
+        // Start intro animation
+        this.state = 'intro';
+        UI.setStatus('');
+        Visuals.startIntroAnimation(
+            { x: playerLocal.x, z: playerLocal.z },
+            { x: holeLocal.x, z: holeLocal.z }
+        );
     },
 
     generateHole() {
-        // Try landmark first
+        // Use the university itself as the "green"
+        // The hole target is the university center or a specific campus landmark
         if (this.landmarks && this.landmarks.length > 0) {
-            const lm = Landmarks.selectForHole(this.holeNumber, this.landmarks);
-            if (lm) {
-                const par = Math.min(6, Math.max(2, Math.ceil(lm.distance / 30) + 1));
-                return {
-                    position: lm.position,
-                    name: lm.name,
-                    category: lm.category,
-                    par,
-                    distance: lm.distance
-                };
-            }
+            // Pick a campus landmark as the specific hole
+            const lm = this.landmarks[
+                (this.holeNumber - 1) % this.landmarks.length
+            ];
+            const dist = GPS.distanceBetween(GPS.currentPosition, lm.position);
+            const par = Math.min(7, Math.max(3, Math.ceil(dist / 40) + 1));
+            return {
+                position: lm.position,
+                name: lm.name,
+                category: lm.category,
+                par,
+                distance: dist
+            };
         }
 
-        // Fallback: random direction
-        const dist = Math.min(100, 20 + (this.holeNumber - 1) * 5) * (0.8 + Math.random() * 0.4);
-        const bearing = Math.random() * 360;
-        const bearingRad = bearing * Math.PI / 180;
-
-        const latOffset = dist * Math.cos(bearingRad) / 111320;
-        const lonOffset = dist * Math.sin(bearingRad) /
-            (111320 * Math.cos(GPS.currentPosition.lat * Math.PI / 180));
-
-        const par = Math.min(6, Math.max(2, Math.ceil(dist / 30) + 1));
+        // Fallback: aim at the university center
+        const dist = this.university
+            ? GPS.distanceBetween(GPS.currentPosition, this.university.position)
+            : 200;
+        const par = Math.min(7, Math.max(3, Math.ceil(dist / 40) + 1));
 
         return {
-            position: {
-                lat: GPS.currentPosition.lat + latOffset,
-                lon: GPS.currentPosition.lon + lonOffset,
-                alt: 0
-            },
-            name: this.randomHoleName(),
-            category: 'random',
+            position: this.university
+                ? this.university.position
+                : {
+                    lat: GPS.currentPosition.lat + 0.002,
+                    lon: GPS.currentPosition.lon + 0.001,
+                    alt: 0
+                },
+            name: this.university ? this.university.name : 'The Green',
+            category: 'university',
             par,
             distance: dist
         };
-    },
-
-    randomHoleName() {
-        const names = [
-            'The Sidewalk Slider', 'Curb Appeal', 'Manhole in One',
-            'The Fire Hydrant', 'Storm Drain Special', 'Corner Pocket',
-            'The Parking Lot', 'Traffic Cone Alley', 'The Pothole'
-        ];
-        return names[(this.holeNumber - 1) % names.length];
     },
 
     onShot(dirX, dirZ, power, angle) {
@@ -216,19 +215,28 @@ const Game = {
         const dt = 1 / 60;
         const time = performance.now() / 1000;
 
+        // Intro animation
+        if (this.state === 'intro') {
+            const done = Visuals.updateIntroAnimation(dt);
+            if (done) {
+                this.state = 'aiming';
+                Controls.enableShooting();
+                UI.setStatus('Swipe up to hit');
+                UI.showReticle();
+                UI.showCompass(0, this.currentHole.distance);
+            }
+        }
+
         // Physics update
         if (this.state === 'flight' || this.state === 'settling') {
             const result = BallPhysics.update(dt);
 
-            // Check if ball reached hole
             const distToHole = BallPhysics.distanceTo(this.holeLocalPos.x, this.holeLocalPos.z);
             if (distToHole < this.SINK_RADIUS &&
                 (BallPhysics.state === 'rolling' || BallPhysics.state === 'resting')) {
                 BallPhysics.sink();
                 this.onHoleComplete();
-            }
-            // Ball came to rest
-            else if (result === 'resting') {
+            } else if (result === 'resting') {
                 this.state = 'settling';
                 setTimeout(() => {
                     if (this.state === 'settling') {
@@ -237,7 +245,6 @@ const Game = {
                         UI.setStatus('Swipe up to hit');
                         UI.showReticle();
 
-                        // Re-aim toward hole
                         Controls.setAimToward(
                             this.holeLocalPos.x, this.holeLocalPos.z,
                             BallPhysics.position.x, BallPhysics.position.z
@@ -247,23 +254,33 @@ const Game = {
             }
         }
 
-        // Update 3D visuals
+        // Update 3D
         Visuals.updateBall(BallPhysics.position.x, BallPhysics.position.y, BallPhysics.position.z);
         Visuals.updateFlag(time);
 
         const distToHole = BallPhysics.distanceTo(this.holeLocalPos.x, this.holeLocalPos.z);
         Visuals.updatePulse(time, distToHole);
-        Visuals.updateCamera(
-            BallPhysics.position,
-            { x: this.holeLocalPos.x, y: 0, z: this.holeLocalPos.z },
-            BallPhysics.state
-        );
 
-        // Update UI
+        if (this.state !== 'intro') {
+            Visuals.updateCamera(
+                BallPhysics.position,
+                { x: this.holeLocalPos.x, y: 0, z: this.holeLocalPos.z },
+                BallPhysics.state
+            );
+        }
+
+        // Update course line
+        if (this.currentHole) {
+            Visuals.updateCourseLine(
+                { x: BallPhysics.position.x, z: BallPhysics.position.z },
+                { x: this.holeLocalPos.x, z: this.holeLocalPos.z }
+            );
+        }
+
+        // UI updates
         UI.setDistance(distToHole);
         UI.setStrokes(BallPhysics.shotCount);
 
-        // Compass bearing to hole
         if (this.currentHole) {
             const dx = this.holeLocalPos.x - BallPhysics.position.x;
             const dz = this.holeLocalPos.z - BallPhysics.position.z;

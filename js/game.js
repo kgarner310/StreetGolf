@@ -12,11 +12,13 @@ const Game = {
     SINK_RADIUS: 3,
     SETTLE_DELAY: 1500,
 
+    initialized: false,
+
     async init() {
         try {
             UI.init();
             Controls.init();
-            Visuals.init();
+            Visuals.init(); // sets Visuals.ready; game works even if 3D fails
 
             Controls.onShot = (dx, dz, power, angle) => this.onShot(dx, dz, power, angle);
             Controls.onPowerChange = (p) => this.onPowerChange(p);
@@ -29,6 +31,7 @@ const Game = {
                 });
             });
 
+            this.initialized = true;
             UI.showStartScreen();
             this.loop();
         } catch (e) {
@@ -39,6 +42,11 @@ const Game = {
     },
 
     async startGame() {
+        if (!this.initialized) {
+            // init() failed or hasn't run yet — try init first
+            this.init();
+            if (!this.initialized) return;
+        }
         try {
             UI.hideStartScreen();
             UI.showLoading('Requesting permissions...');

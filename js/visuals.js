@@ -197,59 +197,40 @@ const Visuals = {
     },
 
     _createBall() {
-        // Golf ball — bigger for arcade visibility
-        const geo = new THREE.SphereGeometry(1.5, 16, 12);
+        // Golf ball — large, bright white, visible from any zoom
+        const geo = new THREE.SphereGeometry(3, 16, 12);
         const mat = new THREE.MeshStandardMaterial({
             color: 0xffffff,
             roughness: 0.1,
             metalness: 0.0,
-            emissive: 0x333333
+            emissive: 0x666666
         });
         this.ball = new THREE.Mesh(geo, mat);
-        this.ball.castShadow = true;
-        this.ball.position.y = 1.5;
+        this.ball.position.y = 3;
         this.scene.add(this.ball);
 
-        // Ball glow ring (pulsing circle under ball)
-        const glowGeo = new THREE.RingGeometry(2, 4, 24);
+        // Bright glow ring under ball
+        const glowGeo = new THREE.RingGeometry(4, 8, 24);
         const glowMat = new THREE.MeshBasicMaterial({
             color: 0x44ffaa,
             transparent: true,
-            opacity: 0.5,
+            opacity: 0.6,
             side: THREE.DoubleSide
         });
         this.ballGlow = new THREE.Mesh(glowGeo, glowMat);
         this.ballGlow.rotation.x = -Math.PI / 2;
-        this.ballGlow.position.y = 0.1;
+        this.ballGlow.position.y = 0.2;
         this.scene.add(this.ballGlow);
 
-        // Ball shadow
-        const shadowGeo = new THREE.CircleGeometry(2, 16);
+        // Ground shadow
+        const shadowGeo = new THREE.CircleGeometry(4, 16);
         const shadowMat = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: 0.3
+            color: 0x000000, transparent: true, opacity: 0.4
         });
         this.ballShadow = new THREE.Mesh(shadowGeo, shadowMat);
         this.ballShadow.rotation.x = -Math.PI / 2;
         this.ballShadow.position.y = 0.05;
         this.scene.add(this.ballShadow);
-
-        // "YOU" label sprite
-        const labelCanvas = document.createElement('canvas');
-        labelCanvas.width = 128;
-        labelCanvas.height = 64;
-        const ctx = labelCanvas.getContext('2d');
-        ctx.fillStyle = '#44ffaa';
-        ctx.font = 'bold 32px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('YOU', 64, 40);
-        const labelTex = new THREE.CanvasTexture(labelCanvas);
-        const labelMat = new THREE.SpriteMaterial({ map: labelTex, transparent: true });
-        this.playerLabel = new THREE.Sprite(labelMat);
-        this.playerLabel.scale.set(12, 6, 1);
-        this.playerLabel.position.y = 10;
-        this.scene.add(this.playerLabel);
     },
 
     _createHole() {
@@ -313,24 +294,16 @@ const Visuals = {
         this.flagCloth.position.set(4.5, 22, 0);
         this.holeGroup.add(this.flagCloth);
 
-        // "THE OLD WELL" label
-        const labelCanvas = document.createElement('canvas');
-        labelCanvas.width = 512;
-        labelCanvas.height = 128;
-        const ctx = labelCanvas.getContext('2d');
-        ctx.fillStyle = '#ffd740';
-        ctx.font = 'bold 48px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('THE OLD WELL', 256, 60);
-        ctx.font = '28px sans-serif';
-        ctx.fillStyle = '#4B9CD3';
-        ctx.fillText('UNC Chapel Hill', 256, 100);
-        const labelTex = new THREE.CanvasTexture(labelCanvas);
+        // Dynamic hole label (updated per hole)
+        this.holeLabelCanvas = document.createElement('canvas');
+        this.holeLabelCanvas.width = 512;
+        this.holeLabelCanvas.height = 96;
+        const labelTex = new THREE.CanvasTexture(this.holeLabelCanvas);
         const labelMat = new THREE.SpriteMaterial({ map: labelTex, transparent: true });
-        const label = new THREE.Sprite(labelMat);
-        label.scale.set(40, 10, 1);
-        label.position.y = 32;
-        this.holeGroup.add(label);
+        this.holeLabelSprite = new THREE.Sprite(labelMat);
+        this.holeLabelSprite.scale.set(50, 10, 1);
+        this.holeLabelSprite.position.y = 32;
+        this.holeGroup.add(this.holeLabelSprite);
 
         this.holeGroup.visible = false;
     },
@@ -470,38 +443,62 @@ const Visuals = {
 
     updateBall(x, y, z) {
         if (!this.ready || !this.ball) return;
-        this.ball.position.set(x, y + 1.5, z);
-        if (this.ballGlow) this.ballGlow.position.set(x, 0.1, z);
-        if (this.ballShadow) this.ballShadow.position.set(x, 0.05, z);
-        if (this.playerLabel) this.playerLabel.position.set(x, y + 10, z);
 
-        // Scale shadow based on height
+        // Ball position — scale up height for visibility
+        const visualY = y * 1.5 + 3;
+        this.ball.position.set(x, visualY, z);
+
+        // Ball gets bigger and glows during flight
+        if (BallPhysics.state === 'flight') {
+            const heightScale = 1 + y * 0.02;
+            this.ball.scale.set(heightScale, heightScale, heightScale);
+            this.ball.material.emissive.setHex(0xaaaa44);
+        } else {
+            this.ball.scale.set(1, 1, 1);
+            this.ball.material.emissive.setHex(0x666666);
+        }
+
+        // Ground glow follows ball on ground
+        if (this.ballGlow) {
+            this.ballGlow.position.set(x, 0.2, z);
+            // Glow brighter during flight
+            this.ballGlow.material.opacity = BallPhysics.state === 'flight' ? 0.8 : 0.5;
+        }
+
+        // Shadow stays on ground, shrinks with height
         if (this.ballShadow) {
-            const shadowScale = Math.max(0.5, 1 - y / 50);
+            this.ballShadow.position.set(x, 0.05, z);
+            const shadowScale = Math.max(0.3, 1 - y / 100);
             this.ballShadow.scale.set(shadowScale, shadowScale, 1);
-            this.ballShadow.material.opacity = 0.3 * shadowScale;
+            this.ballShadow.material.opacity = 0.4 * shadowScale;
         }
 
-        // Trail
+        // Trail — bigger, brighter during flight
         if (BallPhysics.state === 'flight' || BallPhysics.state === 'rolling') {
-            const trailDot = new THREE.Mesh(
-                new THREE.SphereGeometry(0.8, 4, 4),
-                new THREE.MeshBasicMaterial({
-                    color: 0x44ffaa,
-                    transparent: true,
-                    opacity: 0.6
-                })
-            );
-            trailDot.position.set(x, y + 1, z);
-            this.scene.add(trailDot);
-            this.ballTrail.push({ mesh: trailDot, age: 0 });
+            this._trailCounter = (this._trailCounter || 0) + 1;
+            // Drop trail every other frame to avoid too many objects
+            if (this._trailCounter % 2 === 0) {
+                const trailSize = BallPhysics.state === 'flight' ? 2.0 : 1.0;
+                const trailColor = BallPhysics.state === 'flight' ? 0xffff44 : 0x44ffaa;
+                const trailDot = new THREE.Mesh(
+                    new THREE.SphereGeometry(trailSize, 4, 4),
+                    new THREE.MeshBasicMaterial({
+                        color: trailColor,
+                        transparent: true,
+                        opacity: 0.8
+                    })
+                );
+                trailDot.position.set(x, visualY * 0.7, z);
+                this.scene.add(trailDot);
+                this.ballTrail.push({ mesh: trailDot, age: 0 });
+            }
         }
 
-        // Fade trail
+        // Fade and cleanup trail
         for (let i = this.ballTrail.length - 1; i >= 0; i--) {
             this.ballTrail[i].age += 0.016;
-            this.ballTrail[i].mesh.material.opacity = Math.max(0, 0.6 - this.ballTrail[i].age * 0.8);
-            if (this.ballTrail[i].age > 0.75) {
+            this.ballTrail[i].mesh.material.opacity = Math.max(0, 0.8 - this.ballTrail[i].age);
+            if (this.ballTrail[i].age > 0.8) {
                 this.scene.remove(this.ballTrail[i].mesh);
                 this.ballTrail[i].mesh.geometry.dispose();
                 this.ballTrail[i].mesh.material.dispose();
@@ -515,8 +512,18 @@ const Visuals = {
         this.holeGroup.position.set(x, 0, z);
         this.holeGroup.visible = true;
 
-        // Add fairway strip from origin to hole
         this._updateFairway(x, z);
+    },
+
+    setHoleLabel(name) {
+        if (!this.holeLabelCanvas || !this.holeLabelSprite) return;
+        const ctx = this.holeLabelCanvas.getContext('2d');
+        ctx.clearRect(0, 0, 512, 96);
+        ctx.fillStyle = '#ffd740';
+        ctx.font = 'bold 42px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(name || '', 256, 55);
+        this.holeLabelSprite.material.map.needsUpdate = true;
     },
 
     _updateFairway(hx, hz) {
@@ -597,9 +604,9 @@ const Visuals = {
         }
     },
 
-    showAimLine(ballPos, dirX, dirZ, power) {
+    showAimLine(ballPos, dirX, dirZ, swipePower, club) {
         if (!this.ready || !this.aimLine || !this.landingMarker) return;
-        if (power < 0.05) {
+        if (swipePower < 0.05 || !club) {
             this.aimLine.visible = false;
             this.landingMarker.visible = false;
             return;
@@ -607,9 +614,8 @@ const Visuals = {
 
         this.aimLine.visible = true;
 
-        const angle = 15 + power * 30;
-        const rad = angle * Math.PI / 180;
-        const actualPower = 2 + power * 23;
+        const actualPower = club.speed * (0.3 + swipePower * 0.7);
+        const rad = club.angle * Math.PI / 180;
 
         const len = Math.sqrt(dirX * dirX + dirZ * dirZ) || 1;
         const nx = dirX / len;
@@ -621,15 +627,15 @@ const Visuals = {
 
         let px = ballPos.x, py = ballPos.y, pz = ballPos.z;
         const positions = this.aimLine.geometry.attributes.position;
-        const dt = 0.15;
+        const dt = 0.12;
         let landX = px, landZ = pz;
         let count = 0;
 
         for (let i = 0; i < 20; i++) {
-            positions.setXYZ(i, px, py + 1.5, pz);
+            positions.setXYZ(i, px, (py * 1.5) + 3, pz);
             count++;
 
-            vy += -9.81 * dt;
+            vy += -32.2 * dt;
             px += vx * dt;
             py += vy * dt;
             pz += vz * dt;
@@ -638,7 +644,7 @@ const Visuals = {
                 landX = px;
                 landZ = pz;
                 for (let j = i + 1; j < 20; j++) {
-                    positions.setXYZ(j, landX, ballPos.y + 0.5, landZ);
+                    positions.setXYZ(j, landX, 1, landZ);
                     count++;
                 }
                 break;

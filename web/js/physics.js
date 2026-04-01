@@ -1,5 +1,6 @@
 // Golf Ball Physics
-// Handles flight, bounce, rolling, and rest detection
+// Club-specific flight, bounce, rolling, and rest detection
+// 1 unit = 1 yard in the game world
 
 const BallPhysics = {
     position: { x: 0, y: 0, z: 0 },
@@ -7,14 +8,38 @@ const BallPhysics = {
     groundY: 0,
     state: 'placed', // placed, flight, rolling, resting, inHole
 
-    GRAVITY: -9.81,
-    GROUND_FRICTION: 2.5,
-    BOUNCINESS: 0.4,
-    AIR_RESISTANCE: 0.01,
-    MAX_SPEED: 30,
-    MIN_VELOCITY: 0.05,
+    GRAVITY: -32.2,       // ft/s² converted roughly for yard-scale
+    GROUND_FRICTION: 3.0,
+    BOUNCINESS: 0.35,
+    AIR_RESISTANCE: 0.008,
+    MAX_SPEED: 120,
+    MIN_VELOCITY: 0.3,
 
     shotCount: 0,
+
+    // Club definitions: maxYards, launchAngle (degrees), ballSpeed (yards/s)
+    CLUBS: {
+        'Driver':   { maxYards: 300, angle: 11,  speed: 85 },
+        '3 Wood':   { maxYards: 250, angle: 14,  speed: 75 },
+        '5 Iron':   { maxYards: 200, angle: 21,  speed: 62 },
+        '7 Iron':   { maxYards: 165, angle: 27,  speed: 52 },
+        '9 Iron':   { maxYards: 135, angle: 34,  speed: 42 },
+        'PW':       { maxYards: 110, angle: 42,  speed: 35 },
+        'Putter':   { maxYards: 50,  angle: 2,   speed: 15 }
+    },
+
+    currentClub: 'Driver',
+
+    // Select best club for distance (in yards)
+    selectClub(distYards) {
+        if (distYards <= 30)  return 'Putter';
+        if (distYards <= 100) return 'PW';
+        if (distYards <= 130) return '9 Iron';
+        if (distYards <= 165) return '7 Iron';
+        if (distYards <= 200) return '5 Iron';
+        if (distYards <= 250) return '3 Wood';
+        return 'Driver';
+    },
 
     placeAt(x, y, z) {
         this.position = { x, y: y || 0, z };
@@ -23,10 +48,14 @@ const BallPhysics = {
         this.state = 'placed';
     },
 
-    hit(dirX, dirZ, power, launchAngle = 25) {
+    // Hit with current club. swipePower is 0-1 from the player's swipe.
+    hit(dirX, dirZ, swipePower) {
         if (this.state === 'flight' || this.state === 'rolling') return;
 
-        const rad = launchAngle * Math.PI / 180;
+        const club = this.CLUBS[this.currentClub];
+        const power = club.speed * (0.3 + swipePower * 0.7); // 30-100% of club speed
+        const rad = club.angle * Math.PI / 180;
+
         const len = Math.sqrt(dirX * dirX + dirZ * dirZ) || 1;
         const nx = dirX / len;
         const nz = dirZ / len;
@@ -81,7 +110,7 @@ const BallPhysics = {
                 this.velocity.x *= 0.8;
                 this.velocity.z *= 0.8;
 
-                if (impactSpeed < 0.5) {
+                if (impactSpeed < 1.5) {
                     this.velocity.y = 0;
                     this.state = 'rolling';
                 }
@@ -112,6 +141,12 @@ const BallPhysics = {
         const dx = this.position.x - targetX;
         const dz = this.position.z - targetZ;
         return Math.sqrt(dx * dx + dz * dz);
+    },
+
+    // Peak height of current trajectory
+    peakHeight() {
+        if (this.state !== 'flight') return 0;
+        return this.position.y;
     },
 
     reset() {

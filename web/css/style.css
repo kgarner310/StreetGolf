@@ -85,11 +85,29 @@ html, body {
 }
 
 #distance-display {
-    font-size: 52px;
+    font-size: 56px;
     font-weight: 800;
     text-shadow: 0 2px 12px rgba(0,0,0,0.9);
     color: #fff;
     letter-spacing: -1px;
+    line-height: 1;
+}
+
+#distance-unit {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #888;
+    margin-top: 2px;
+}
+
+#club-name {
+    font-size: 22px;
+    font-weight: 800;
+    color: #ffd740;
+    margin-top: 8px;
+    letter-spacing: 1px;
+    text-shadow: 0 0 12px rgba(255, 215, 64, 0.4);
 }
 
 #status-text {

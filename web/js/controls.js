@@ -106,11 +106,9 @@ const Controls = {
 
         if (this.swipePower > 0.05) {
             const dir = this.getAimDirection();
-            const power = 2 + this.swipePower * 23; // 2-25 m/s
-            const angle = 15 + this.swipePower * 30;  // 15-45 degrees
 
             if (this.onShot) {
-                this.onShot(dir.x, dir.z, power, angle);
+                this.onShot(dir.x, dir.z, this.swipePower);
             }
 
             this.canShoot = false;

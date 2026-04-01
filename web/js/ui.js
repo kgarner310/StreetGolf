@@ -1,5 +1,5 @@
 // UI Manager
-// Updates HUD elements, score panel, status text
+// Updates HUD elements, score panel, club display, status text
 
 const UI = {
     els: {},
@@ -10,13 +10,13 @@ const UI = {
             holeName: document.getElementById('hole-name'),
             parDisplay: document.getElementById('par-display'),
             distance: document.getElementById('distance-display'),
+            distanceUnit: document.getElementById('distance-unit'),
             status: document.getElementById('status-text'),
             reticle: document.getElementById('aim-reticle'),
             strokeCount: document.getElementById('stroke-count'),
+            clubName: document.getElementById('club-name'),
             powerFill: document.getElementById('power-fill'),
             powerPercent: document.getElementById('power-percent'),
-            compass: document.getElementById('compass-arrow'),
-            compassDist: document.getElementById('compass-dist'),
             holeComplete: document.getElementById('hole-complete'),
             scoreName: document.getElementById('score-name'),
             scoreStrokes: document.getElementById('score-strokes'),
@@ -38,12 +38,9 @@ const UI = {
         this.els.parDisplay.textContent = `PAR ${par}`;
     },
 
-    setDistance(meters) {
-        if (meters >= 1000) {
-            this.els.distance.textContent = `${(meters / 1000).toFixed(1)} km`;
-        } else {
-            this.els.distance.textContent = `${Math.round(meters)} m`;
-        }
+    setDistanceYards(yards) {
+        this.els.distance.textContent = Math.round(yards);
+        if (this.els.distanceUnit) this.els.distanceUnit.textContent = 'YDS';
     },
 
     setStatus(text) {
@@ -54,6 +51,10 @@ const UI = {
         this.els.strokeCount.textContent = `Strokes: ${count}`;
     },
 
+    setClub(clubName) {
+        if (this.els.clubName) this.els.clubName.textContent = clubName;
+    },
+
     setPower(normalized) {
         this.els.powerFill.style.width = `${normalized * 100}%`;
         this.els.powerPercent.textContent = `${Math.round(normalized * 100)}%`;
@@ -61,14 +62,6 @@ const UI = {
 
     showReticle() { this.els.reticle.classList.remove('hidden'); },
     hideReticle() { this.els.reticle.classList.add('hidden'); },
-
-    showCompass(bearing, distance) {
-        this.els.compass.classList.remove('hidden');
-        this.els.compass.style.transform =
-            `translateX(-50%) rotate(${bearing}deg)`;
-        this.els.compassDist.textContent = `${Math.round(distance)}m`;
-    },
-    hideCompass() { this.els.compass.classList.add('hidden'); },
 
     showLoading(text) {
         this.els.loading.classList.remove('hidden');
@@ -99,7 +92,7 @@ const UI = {
         else this.els.scoreCompare.textContent = `${diff}`;
 
         this.els.scoreTotal.textContent = `Total: ${result.totalStrokes}`;
-        this.els.scoreDistance.textContent = `${Math.round(result.distance)}m hole`;
+        this.els.scoreDistance.textContent = `${Math.round(result.distance)} yd hole`;
         this.els.landmarkPlayed.textContent = result.landmarkName || '';
     },
 
@@ -110,7 +103,6 @@ const UI = {
         if (el) el.textContent = name;
     },
 
-    // Haptic feedback
     vibrate(ms = 20) {
         if (navigator.vibrate) navigator.vibrate(ms);
     }

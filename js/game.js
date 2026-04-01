@@ -20,10 +20,18 @@ const Game = {
 
     async init() {
         try {
-            console.log('StreetGolf v20260401a');
+            console.log('StreetGolf v20260401b');
             UI.init();
             Controls.init();
             Visuals.init();
+
+            // Persistent debug overlay during gameplay
+            this._debugEl = document.createElement('div');
+            this._debugEl.style.cssText = 'position:fixed;bottom:60px;left:5px;font-size:10px;color:#ff0;z-index:99;background:rgba(0,0,0,0.7);padding:4px 6px;border-radius:4px;pointer-events:none;';
+            document.body.appendChild(this._debugEl);
+            this._debugEl.textContent = 'v20260401b | 3D:' + (Visuals.ready ? 'OK' : 'FAIL') +
+                ' | cam:' + (Visuals.camera ? 'OK' : 'NULL') +
+                ' | renderer:' + (Visuals.renderer ? 'OK' : 'NULL');
 
             if (!Visuals.ready) {
                 var d = document.getElementById('debug');
@@ -354,6 +362,17 @@ const Game = {
 
         UI.setDistanceYards(Math.round(distToHole));
         UI.setStrokes(BallPhysics.shotCount);
+
+        // Update debug overlay every 60 frames
+        this._debugCounter = (this._debugCounter || 0) + 1;
+        if (this._debugEl && this._debugCounter % 60 === 0) {
+            const cp = Visuals.camera ? Visuals.camera.position : null;
+            this._debugEl.textContent = 'v20260401b | 3D:' + (Visuals.ready ? 'OK' : 'FAIL') +
+                ' | st:' + this.state +
+                (cp ? ' | cam:' + Math.round(cp.x) + ',' + Math.round(cp.y) + ',' + Math.round(cp.z) : '') +
+                ' | hole:' + Math.round(this.holeLocalPos.x) + ',' + Math.round(this.holeLocalPos.z) +
+                ' | route:' + (Visuals.routeFairwayGroup ? Visuals.routeFairwayGroup.children.length : 'none');
+        }
 
         Visuals.render();
         requestAnimationFrame(() => this.loop());

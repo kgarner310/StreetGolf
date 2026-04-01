@@ -119,32 +119,9 @@ html, body {
     letter-spacing: 1px;
 }
 
-/* Aim reticle */
+/* Aim reticle — hidden, slingshot controls don't need it */
 #aim-reticle {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: 50px; height: 50px;
-}
-
-#aim-reticle.hidden { display: none; }
-
-.reticle-h, .reticle-v {
-    position: absolute;
-    background: rgba(68, 255, 170, 0.7);
-    border-radius: 1px;
-}
-
-.reticle-h {
-    width: 50px; height: 2px;
-    top: 50%; left: 0;
-    transform: translateY(-50%);
-}
-
-.reticle-v {
-    width: 2px; height: 50px;
-    left: 50%; top: 0;
-    transform: translateX(-50%);
+    display: none;
 }
 
 /* Bottom HUD */
@@ -194,26 +171,9 @@ html, body {
     color: #44ffaa;
 }
 
-/* Compass arrow */
+/* Compass arrow — hidden, slingshot controls handle aiming */
 #compass-arrow {
-    position: fixed;
-    top: 130px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 28px;
-    color: #ffd740;
-    text-align: center;
-    z-index: 11;
-    text-shadow: 0 0 12px rgba(255, 215, 64, 0.6);
-    animation: bob 2s ease-in-out infinite;
-}
-
-#compass-arrow.hidden { display: none; }
-#compass-dist { font-size: 12px; color: #aaa; }
-
-@keyframes bob {
-    0%, 100% { transform: translateX(-50%) translateY(0); }
-    50% { transform: translateX(-50%) translateY(-8px); }
+    display: none;
 }
 
 /* Hole complete panel */

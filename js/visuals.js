@@ -42,13 +42,13 @@ const Visuals = {
             if (typeof THREE === 'undefined') { console.error('Three.js not loaded'); return; }
 
             this.scene = new THREE.Scene();
-            this.scene.fog = new THREE.FogExp2(0x1a2a1a, 0.0015);
+            this.scene.fog = new THREE.FogExp2(0x1a2a1a, 0.00015);
 
             // Camera
             this.camera = new THREE.PerspectiveCamera(
-                50, window.innerWidth / window.innerHeight, 0.1, 2000
+                50, window.innerWidth / window.innerHeight, 0.1, 8000
             );
-            this.camera.position.set(0, 300, 150);
+            this.camera.position.set(0, 600, 300);
             this.camera.lookAt(0, 0, 0);
 
             // Renderer — try without antialias first on mobile
@@ -84,8 +84,8 @@ const Visuals = {
     },
 
     _createCampusGround() {
-        // Main grass ground — large area
-        const groundGeo = new THREE.PlaneGeometry(1200, 1200, 20, 20);
+        // Main grass ground — large area covering 600yd holes
+        const groundGeo = new THREE.PlaneGeometry(3000, 3000, 20, 20);
         const groundMat = new THREE.MeshStandardMaterial({
             color: 0x1a5c2a,
             roughness: 0.9,
@@ -98,7 +98,7 @@ const Visuals = {
         this.scene.add(this.campusGround);
 
         // Subtle grid lines for arcade feel
-        const gridHelper = new THREE.GridHelper(1200, 60, 0x1a6630, 0x1a6630);
+        const gridHelper = new THREE.GridHelper(3000, 60, 0x1a6630, 0x1a6630);
         gridHelper.material.opacity = 0.15;
         gridHelper.material.transparent = true;
         gridHelper.position.y = 0.05;
@@ -665,7 +665,7 @@ const Visuals = {
         if (this.landingMarker) this.landingMarker.visible = false;
     },
 
-    // Intro camera animation: sweeps from player to hole
+    // Intro camera animation: sweeps from ball up to show both ball and hole
     startIntroAnimation(ballPos, holePos) {
         if (!this.ready || !this.camera) { this.introAnimating = false; return; }
         this.introAnimating = true;
@@ -677,8 +677,17 @@ const Visuals = {
         const dist = Math.sqrt(
             (holePos.x - ballPos.x) ** 2 + (holePos.z - ballPos.z) ** 2
         );
-        this.introHeight = Math.max(80, dist * 0.7);
-        this.camera.position.set(ballPos.x, 40, ballPos.z + 30);
+
+        // Calculate the height needed to frame both points
+        const fovRad = this.camera.fov * Math.PI / 180;
+        const aspect = this.camera.aspect;
+        const halfExtent = (dist / 2) * 1.4;
+        const hForV = halfExtent / Math.tan(fovRad / 2);
+        const hForH = halfExtent / (Math.tan(fovRad / 2) * aspect);
+        this.introHeight = Math.max(100, Math.max(hForV, hForH));
+
+        // Start close to the ball
+        this.camera.position.set(ballPos.x, 60, ballPos.z + 40);
         this.camera.lookAt(ballPos.x, 0, ballPos.z);
     },
 
@@ -690,41 +699,46 @@ const Visuals = {
         const hp = this.introHolePos;
         const midX = (bp.x + hp.x) / 2;
         const midZ = (bp.z + hp.z) / 2;
-        const dist = Math.sqrt((hp.x - bp.x) ** 2 + (hp.z - bp.z) ** 2);
 
-        // Phase 0: Zoom out from player (0-1.5s)
-        if (this.introTimer < 1.5) {
-            const t = this.introTimer / 1.5;
-            const ease = t * t * (3 - 2 * t); // smoothstep
+        // Phase 0: Zoom out from player to show ball (0-1s)
+        if (this.introTimer < 1.0) {
+            const t = this.introTimer / 1.0;
+            const ease = t * t * (3 - 2 * t);
             this.camera.position.lerp(
-                new THREE.Vector3(midX, this.introHeight * 0.5, midZ + this.introHeight * 0.4), 0.04
+                new THREE.Vector3(bp.x, this.introHeight * 0.4, bp.z + this.introHeight * 0.2), 0.06
             );
+            this.camera.lookAt(
+                bp.x + (midX - bp.x) * ease * 0.3,
+                0,
+                bp.z + (midZ - bp.z) * ease * 0.3
+            );
+        }
+        // Phase 1: Pan up to show entire course — ball AND hole (1-3s)
+        else if (this.introTimer < 3.0) {
+            const t = (this.introTimer - 1.0) / 2.0;
+            const ease = t * t * (3 - 2 * t);
+            const targetPos = new THREE.Vector3(
+                midX,
+                this.introHeight,
+                midZ + this.introHeight * 0.15
+            );
+            this.camera.position.lerp(targetPos, 0.05);
             this.camera.lookAt(
                 bp.x + (midX - bp.x) * ease,
                 0,
                 bp.z + (midZ - bp.z) * ease
             );
         }
-        // Phase 1: Pan to show whole course (1.5-3.5s)
-        else if (this.introTimer < 3.5) {
-            const t = (this.introTimer - 1.5) / 2;
-            const ease = t * t * (3 - 2 * t);
-            this.camera.position.lerp(
-                new THREE.Vector3(
-                    midX + dist * 0.15,
-                    this.introHeight,
-                    midZ + dist * 0.35
-                ), 0.04
-            );
-            this.camera.lookAt(
-                midX + (hp.x - midX) * ease * 0.5,
-                0,
-                midZ + (hp.z - midZ) * ease * 0.5
-            );
-        }
-        // Phase 2: Settle into play position (3.5-4.5s)
+        // Phase 2: Settle into final play position (3-3.8s)
         else {
-            const t = Math.min(1, (this.introTimer - 3.5) / 1.0);
+            const t = Math.min(1, (this.introTimer - 3.0) / 0.8);
+            const targetPos = new THREE.Vector3(
+                midX,
+                this.introHeight,
+                midZ + this.introHeight * 0.15
+            );
+            this.camera.position.lerp(targetPos, 0.08);
+            this.camera.lookAt(midX, 0, midZ);
             if (t >= 1) {
                 this.introAnimating = false;
                 return true; // done
@@ -743,31 +757,161 @@ const Visuals = {
             (holePos.x - ballPos.x) ** 2 + (holePos.z - ballPos.z) ** 2
         );
 
+        // Apply zoom factor (pinch-to-zoom)
+        const zoom = this.zoomLevel || 1.0;
+
         if (state === 'flight' || state === 'rolling') {
-            // Follow ball, slightly zoomed in
-            const height = Math.max(40, dist * 0.4);
+            // Follow ball but keep enough height to see the hole too
+            const flightMidX = (ballPos.x + holePos.x) * 0.5;
+            const flightMidZ = (ballPos.z + holePos.z) * 0.5;
+            const height = Math.max(80, dist * 0.8) * zoom;
             const target = new THREE.Vector3(
-                ballPos.x,
+                flightMidX,
                 height,
-                ballPos.z + height * 0.5
+                flightMidZ + height * 0.25
+            );
+            this.camera.position.lerp(target, 0.05);
+            this.camera.lookAt(flightMidX, 0, flightMidZ);
+        } else {
+            // Aiming / overview: frame BOTH ball and hole
+            const fovRad = this.camera.fov * Math.PI / 180;
+            const aspect = this.camera.aspect;
+
+            const padding = 1.4;
+            const halfExtent = (dist / 2) * padding;
+
+            const heightForVert = halfExtent / Math.tan(fovRad / 2);
+            const heightForHoriz = halfExtent / (Math.tan(fovRad / 2) * aspect);
+
+            const height = Math.max(100, Math.max(heightForVert, heightForHoriz)) * zoom;
+
+            const target = new THREE.Vector3(
+                midX,
+                height,
+                midZ + height * 0.15
             );
             this.camera.position.lerp(target, 0.04);
-            this.camera.lookAt(ballPos.x, 0, ballPos.z);
-        } else {
-            // Overview: see both ball and hole
-            const height = Math.max(60, dist * 0.6);
-            const target = new THREE.Vector3(
-                midX + dist * 0.05,
-                height,
-                midZ + height * 0.4
-            );
-            this.camera.position.lerp(target, 0.03);
             this.camera.lookAt(midX, 0, midZ);
         }
     },
 
+    // Draw the OSRM driving route as the fairway on the 3D scene
+    // routePoints is an array of {x, z} in game-world yards
+    drawRouteFairway(routePoints) {
+        if (!this.ready || !routePoints || routePoints.length < 2) return;
+
+        // Remove old route fairway
+        this._clearRouteFairway();
+
+        this.routeFairwayGroup = new THREE.Group();
+
+        // Road surface — thick line segments as quads
+        const roadWidth = 14;
+        for (let i = 0; i < routePoints.length - 1; i++) {
+            const p0 = routePoints[i];
+            const p1 = routePoints[i + 1];
+            const dx = p1.x - p0.x;
+            const dz = p1.z - p0.z;
+            const segLen = Math.sqrt(dx * dx + dz * dz);
+            if (segLen < 0.5) continue;
+
+            const angle = Math.atan2(dx, dz);
+
+            const segGeo = new THREE.PlaneGeometry(roadWidth, segLen);
+            const segMat = new THREE.MeshStandardMaterial({
+                color: 0x444444,
+                roughness: 0.9,
+                transparent: true,
+                opacity: 0.7
+            });
+            const seg = new THREE.Mesh(segGeo, segMat);
+            seg.rotation.x = -Math.PI / 2;
+            seg.rotation.z = -angle;
+            seg.position.set(
+                (p0.x + p1.x) / 2,
+                0.03,
+                (p0.z + p1.z) / 2
+            );
+            this.routeFairwayGroup.add(seg);
+
+            // Road edge lines (yellow dashes)
+            if (i % 3 === 0) {
+                const perpX = -Math.cos(angle);
+                const perpZ = Math.sin(angle);
+                for (const side of [-1, 1]) {
+                    const edgeGeo = new THREE.PlaneGeometry(1.5, Math.min(segLen, 8));
+                    const edgeMat = new THREE.MeshBasicMaterial({
+                        color: 0xffdd00,
+                        transparent: true,
+                        opacity: 0.5
+                    });
+                    const edge = new THREE.Mesh(edgeGeo, edgeMat);
+                    edge.rotation.x = -Math.PI / 2;
+                    edge.rotation.z = -angle;
+                    edge.position.set(
+                        (p0.x + p1.x) / 2 + perpX * (roadWidth / 2) * side,
+                        0.04,
+                        (p0.z + p1.z) / 2 + perpZ * (roadWidth / 2) * side
+                    );
+                    this.routeFairwayGroup.add(edge);
+                }
+            }
+
+            // Center dashes (white)
+            if (i % 4 === 0) {
+                const centerGeo = new THREE.PlaneGeometry(1, Math.min(segLen, 6));
+                const centerMat = new THREE.MeshBasicMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.4
+                });
+                const center = new THREE.Mesh(centerGeo, centerMat);
+                center.rotation.x = -Math.PI / 2;
+                center.rotation.z = -angle;
+                center.position.set(
+                    (p0.x + p1.x) / 2,
+                    0.05,
+                    (p0.z + p1.z) / 2
+                );
+                this.routeFairwayGroup.add(center);
+            }
+        }
+
+        this.scene.add(this.routeFairwayGroup);
+    },
+
+    // Fallback: straight fairway strip when route fetch fails
+    drawStraightFairway(x1, z1, x2, z2) {
+        if (!this.ready) return;
+        this._clearRouteFairway();
+        // _updateFairway already handles the straight strip
+    },
+
+    _clearRouteFairway() {
+        if (this.routeFairwayGroup) {
+            this.routeFairwayGroup.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            this.scene.remove(this.routeFairwayGroup);
+            this.routeFairwayGroup = null;
+        }
+    },
+
+    // Pinch-to-zoom: temporarily scale camera height
+    zoomLevel: 1.0,
+    zoomTarget: 1.0,
+    MIN_ZOOM: 0.3,
+    MAX_ZOOM: 2.5,
+
+    setZoom(level) {
+        this.zoomTarget = Math.max(this.MIN_ZOOM, Math.min(this.MAX_ZOOM, level));
+    },
+
     render() {
         if (this.renderer && this.scene && this.camera) {
+            // Smooth zoom interpolation
+            this.zoomLevel += (this.zoomTarget - this.zoomLevel) * 0.1;
             this.renderer.render(this.scene, this.camera);
         }
     },

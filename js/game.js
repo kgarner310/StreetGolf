@@ -1,5 +1,6 @@
 // Main Game Loop — Arcade Street Golf
-// Holes scaled to 150-600 yards in the direction of real landmarks
+// Holes scaled to 150-600 yards in direction of real landmarks
+// Fairway follows actual road routes from OSM
 
 const Game = {
     state: 'start', // start, loading, intro, aiming, flight, settling, complete
@@ -7,16 +8,13 @@ const Game = {
     totalStrokes: 0,
     currentHole: null,
     holeLocalPos: { x: 0, z: 0 },
-    ballStart: { x: 0, z: 0 },
     university: null,
     landmarks: null,
 
-    SINK_RADIUS: 5, // yards
+    SINK_RADIUS: 5,
     SETTLE_DELAY: 1200,
-
     initialized: false,
 
-    // Hole distances in yards (150-600)
     HOLE_DISTANCES: [380, 165, 540, 195, 420, 150, 490, 210, 600,
                      350, 175, 520, 200, 440, 160, 480, 230, 560],
 
@@ -26,8 +24,14 @@ const Game = {
             Controls.init();
             Visuals.init();
 
+            // Wire slingshot controls
             Controls.onShot = (dx, dz, power) => this.onShot(dx, dz, power);
-            Controls.onPowerChange = (p) => this.onPowerChange(p);
+            Controls.onAimChange = (dx, dz, power) => this.onAimChange(dx, dz, power);
+
+            // Give controls access to Three.js camera for screen-to-world projection
+            Controls.camera = Visuals.camera;
+            Controls.getBallPos = () => BallPhysics.position;
+            Controls.getHolePos = () => this.holeLocalPos;
 
             UI.els.nextHoleBtn.addEventListener('click', () => this.nextHole());
             UI.els.startBtn.addEventListener('click', () => {
@@ -85,7 +89,7 @@ const Game = {
             UI.showLoading('Finding landmarks at ' + this.university.name + '...');
             try {
                 this.landmarks = await Landmarks.searchNearUniversity(
-                    this.university.position, 2000
+                    this.university.position, 5000
                 );
             } catch (err) {
                 console.warn('Landmark search failed:', err);
@@ -108,20 +112,20 @@ const Game = {
     startNewHole() {
         this.holeNumber++;
         BallPhysics.reset();
-
-        // Ball starts at origin (0,0)
-        this.ballStart = { x: 0, z: 0 };
         BallPhysics.placeAt(0, 0, 0);
 
-        // Generate hole — scaled to golf distance in direction of landmark
+        // Reset zoom for new hole
+        Visuals.setZoom(1.0);
+
+        // Generate hole
         this.currentHole = this.generateHole();
         this.holeLocalPos = { x: this.currentHole.holeX, z: this.currentHole.holeZ };
 
-        // Select initial club
+        // Select club
         const distYards = this.currentHole.distYards;
         BallPhysics.currentClub = BallPhysics.selectClub(distYards);
 
-        // Set up 3D
+        // Set up 3D scene
         Visuals.setHolePosition(this.holeLocalPos.x, this.holeLocalPos.z);
         Visuals.updateBall(0, 0, 0);
         Visuals.updateCourseLine(
@@ -129,6 +133,9 @@ const Game = {
             { x: this.holeLocalPos.x, z: this.holeLocalPos.z }
         );
         Visuals.setHoleLabel(this.currentHole.name);
+
+        // Fetch driving route and draw as fairway
+        this.fetchAndDrawRoute();
 
         // Auto-aim toward hole
         Controls.setAimToward(this.holeLocalPos.x, this.holeLocalPos.z, 0, 0);
@@ -148,40 +155,95 @@ const Game = {
         );
     },
 
+    async fetchAndDrawRoute() {
+        if (!this.currentHole.landmarkGPS || !GPS.currentPosition) {
+            Visuals.drawStraightFairway(0, 0, this.holeLocalPos.x, this.holeLocalPos.z);
+            return;
+        }
+
+        try {
+            const from = GPS.currentPosition;
+            const to = this.currentHole.landmarkGPS;
+            const url = `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
+
+            const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const data = await response.json();
+            if (!data.routes || data.routes.length === 0) throw new Error('No route');
+
+            const coords = data.routes[0].geometry.coordinates;
+            // Convert GPS coordinates to game-world yards
+            // coords are [lon, lat] pairs
+            const routePoints = this.convertRouteToGameCoords(coords);
+            Visuals.drawRouteFairway(routePoints);
+        } catch (err) {
+            console.warn('Route fetch failed:', err.message);
+            Visuals.drawStraightFairway(0, 0, this.holeLocalPos.x, this.holeLocalPos.z);
+        }
+    },
+
+    convertRouteToGameCoords(coords) {
+        // Convert GPS route coords to local meters, then scale to match game hole distance
+        const localPoints = coords.map(c => {
+            const gps = { lat: c[1], lon: c[0], alt: 0 };
+            return GPS.toLocal(gps);
+        });
+
+        if (localPoints.length < 2) return [];
+
+        // Route in meters from GPS origin
+        // Scale so the route endpoints match ball (0,0) and hole position
+        const routeStart = localPoints[0];
+        const routeEnd = localPoints[localPoints.length - 1];
+
+        // Real distance of route (meters)
+        const realDx = routeEnd.x - routeStart.x;
+        const realDz = routeEnd.z - routeStart.z;
+        const realDist = Math.sqrt(realDx * realDx + realDz * realDz) || 1;
+
+        // Game distance (yards)
+        const gameDist = Math.sqrt(
+            this.holeLocalPos.x * this.holeLocalPos.x +
+            this.holeLocalPos.z * this.holeLocalPos.z
+        ) || 1;
+
+        const scale = gameDist / realDist;
+
+        // Translate so route starts at (0,0) and scale
+        return localPoints.map(p => ({
+            x: (p.x - routeStart.x) * scale,
+            z: (p.z - routeStart.z) * scale
+        }));
+    },
+
     generateHole() {
-        // Pick a target distance (yards)
         const distIndex = (this.holeNumber - 1) % this.HOLE_DISTANCES.length;
         const distYards = this.HOLE_DISTANCES[distIndex];
 
-        // Calculate par from yards
         let par;
         if (distYards <= 200) par = 3;
         else if (distYards <= 450) par = 4;
         else par = 5;
 
-        // Get bearing to a real landmark
-        let bearing, name;
+        let bearing, name, landmarkGPS;
         if (this.landmarks && this.landmarks.length > 0) {
             const lm = this.landmarks[(this.holeNumber - 1) % this.landmarks.length];
-            // Bearing from player to landmark
             const lmLocal = GPS.toLocal(lm.position);
             const playerLocal = GPS.toLocal(GPS.currentPosition);
-            bearing = Math.atan2(
-                lmLocal.x - playerLocal.x,
-                lmLocal.z - playerLocal.z
-            );
+            bearing = Math.atan2(lmLocal.x - playerLocal.x, lmLocal.z - playerLocal.z);
             name = lm.name;
+            landmarkGPS = lm.position;
         } else {
-            // Random bearing
             bearing = ((this.holeNumber * 137.5) % 360) * Math.PI / 180;
             name = this.randomHoleName();
+            landmarkGPS = null;
         }
 
-        // Place hole at golf distance in the landmark's direction
         const holeX = Math.sin(bearing) * distYards;
         const holeZ = Math.cos(bearing) * distYards;
 
-        return { holeX, holeZ, distYards, par, name, bearing };
+        return { holeX, holeZ, distYards, par, name, bearing, landmarkGPS };
     },
 
     randomHoleName() {
@@ -197,16 +259,14 @@ const Game = {
         BallPhysics.hit(dirX, dirZ, swipePower);
         this.state = 'flight';
         UI.setStatus('');
-        UI.hideReticle();
         Visuals.hideAim();
         UI.vibrate(40);
     },
 
-    onPowerChange(power) {
+    onAimChange(dirX, dirZ, power) {
         UI.setPower(power);
-        if (power > 0.05) {
-            const dir = Controls.getAimDirection();
-            Visuals.showAimLine(BallPhysics.position, dir.x, dir.z, power,
+        if (power > 0.03) {
+            Visuals.showAimLine(BallPhysics.position, dirX, dirZ, power,
                 BallPhysics.CLUBS[BallPhysics.currentClub]);
         } else {
             Visuals.hideAim();
@@ -228,12 +288,11 @@ const Game = {
             if (done) {
                 this.state = 'aiming';
                 Controls.enableShooting();
-                UI.setStatus('SWIPE UP TO HIT');
-                UI.showReticle();
+                UI.setStatus('PULL BACK TO AIM');
             }
         }
 
-        // Physics update
+        // Physics
         if (this.state === 'flight' || this.state === 'settling') {
             const result = BallPhysics.update(dt);
 
@@ -248,7 +307,6 @@ const Game = {
                     if (this.state === 'settling') {
                         this.state = 'aiming';
 
-                        // Auto-select club for remaining distance
                         const remaining = BallPhysics.distanceTo(
                             this.holeLocalPos.x, this.holeLocalPos.z
                         );
@@ -256,13 +314,11 @@ const Game = {
                         UI.setClub(BallPhysics.currentClub);
 
                         Controls.enableShooting();
-                        UI.setStatus('SWIPE UP TO HIT');
-                        UI.showReticle();
-
                         Controls.setAimToward(
                             this.holeLocalPos.x, this.holeLocalPos.z,
                             BallPhysics.position.x, BallPhysics.position.z
                         );
+                        UI.setStatus('PULL BACK TO AIM');
                     }
                 }, this.SETTLE_DELAY);
             }
@@ -290,7 +346,6 @@ const Game = {
             );
         }
 
-        // UI distance in yards
         UI.setDistanceYards(Math.round(distToHole));
         UI.setStrokes(BallPhysics.shotCount);
 
@@ -314,9 +369,7 @@ const Game = {
         else scoreName = `+${diff}`;
 
         this.totalStrokes += BallPhysics.shotCount;
-
         UI.vibrate(80);
-        UI.hideReticle();
 
         UI.showHoleComplete({
             scoreName,

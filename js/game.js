@@ -20,9 +20,15 @@ const Game = {
 
     async init() {
         try {
+            console.log('StreetGolf v20260401a');
             UI.init();
             Controls.init();
             Visuals.init();
+
+            if (!Visuals.ready) {
+                var d = document.getElementById('debug');
+                if (d) d.textContent = 'WARNING: 3D engine failed to start';
+            }
 
             // Wire slingshot controls
             Controls.onShot = (dx, dz, power) => this.onShot(dx, dz, power);

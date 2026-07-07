@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SENTRY RF</string>
+    <string name="tagline">Counter-surveillance scanner · 100% on-device</string>
+
+    <string name="nav_scan">Scan</string>
+    <string name="nav_devices">Devices</string>
+    <string name="nav_network">Network</string>
+    <string name="nav_sky">Sky</string>
+    <string name="nav_report">Report</string>
+
+    <string name="start_scan">START SWEEP</string>
+    <string name="stop_scan">STOP SWEEP</string>
+    <string name="status_idle">Ready. Start a sweep to scan for trackers, drones and rogue networks.</string>
+    <string name="status_scanning">Sweeping… %1$d devices in range</string>
+    <string name="status_stopped">Sweep stopped — %1$d devices recorded</string>
+    <string name="privacy_note">No cloud. No accounts. Everything stays on this phone.</string>
+
+    <string name="title_devices">Bluetooth devices</string>
+    <string name="empty_devices">No devices yet — start a sweep from the Scan tab, then tap any device to locate it.</string>
+
+    <string name="title_network">Network threats</string>
+    <string name="rescan">RESCAN</string>
+    <string name="scanning_network">Scanning WiFi and cell environment…</string>
+
+    <string name="title_sky">Drone watch</string>
+    <string name="empty_sky">No Remote ID broadcasts detected. Drones flying nearby that comply with FAA Remote ID will appear here with model, position and operator location.</string>
+
+    <string name="title_report">Evidence &amp; following</string>
+    <string name="export_report">EXPORT EVIDENCE REPORT</string>
+    <string name="clear_history">CLEAR</string>
+    <string name="empty_report">No tracker sightings recorded yet. Run sweeps as you move between locations — devices that follow you will be flagged here.</string>
+
+    <string name="badge_alert">ALERT</string>
+    <string name="badge_caution">CAUTION</string>
+    <string name="badge_info">INFO</string>
+
+    <string name="proximity_title">Physical sweep</string>
+    <string name="proximity_readout">%1$d dBm · ~%2$.1f m away</string>
+    <string name="proximity_hint">Move slowly. The tick speeds up and the bar fills as you get closer to the transmitter.</string>
+    <string name="close">Close</string>
+</resources>

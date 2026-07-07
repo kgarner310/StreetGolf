@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background">#0A0F14</color>
+    <color name="surface">#141C24</color>
+    <color name="accent">#3DDC84</color>
+    <color name="accent_dim">#1F7A4D</color>
+    <color name="text_primary">#E8EEF2</color>
+    <color name="text_secondary">#8A99A8</color>
+    <color name="text_meta">#5C6B7A</color>
+    <color name="threat_alert">#FF5252</color>
+    <color name="threat_caution">#FFB300</color>
+    <color name="threat_info">#4FC3F7</color>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/nav_dashboard" android:title="@string/nav_scan"
+        android:icon="@drawable/ic_radar" />
+    <item android:id="@+id/nav_devices" android:title="@string/nav_devices"
+        android:icon="@drawable/ic_bluetooth" />
+    <item android:id="@+id/nav_network" android:title="@string/nav_network"
+        android:icon="@drawable/ic_wifi" />
+    <item android:id="@+id/nav_sky" android:title="@string/nav_sky"
+        android:icon="@drawable/ic_drone" />
+    <item android:id="@+id/nav_report" android:title="@string/nav_report"
+        android:icon="@drawable/ic_report" />
+</menu>

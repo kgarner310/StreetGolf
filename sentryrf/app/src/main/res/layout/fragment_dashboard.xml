@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="@string/app_name"
+        android:textColor="@color/accent"
+        android:textSize="30sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.15" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="@string/tagline"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/text_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="48dp"
+        android:gravity="center"
+        android:textColor="@color/text_primary"
+        android:textSize="17sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:orientation="horizontal">
+
+        <LinearLayout style="@style/StatTile">
+            <TextView android:id="@+id/count_alert" style="@style/StatNumber"
+                android:textColor="@color/threat_alert" />
+            <TextView style="@style/StatLabel" android:text="@string/badge_alert" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/StatTile">
+            <TextView android:id="@+id/count_caution" style="@style/StatNumber"
+                android:textColor="@color/threat_caution" />
+            <TextView style="@style/StatLabel" android:text="@string/badge_caution" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/StatTile">
+            <TextView android:id="@+id/count_info" style="@style/StatNumber"
+                android:textColor="@color/threat_info" />
+            <TextView style="@style/StatLabel" android:text="@string/badge_info" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_scan"
+        android:layout_width="220dp"
+        android:layout_height="64dp"
+        android:layout_marginTop="48dp"
+        android:text="@string/start_scan"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:gravity="center"
+        android:text="@string/privacy_note"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp" />
+</LinearLayout>

@@ -1,4 +1,4 @@
-package com.sentryrf.scanner
+package com.gogogadget.scanner
 
 import android.Manifest
 import android.os.Build

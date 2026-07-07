@@ -1,4 +1,4 @@
-package com.sentryrf.scanner
+package com.gogogadget.scanner
 
 /**
  * Minimal decoder for ASTM F3411 (FAA Remote ID) messages carried in BLE

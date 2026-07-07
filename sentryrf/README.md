@@ -1,6 +1,6 @@
-# Sentry RF — Counter-Surveillance Scanner (rebuild)
+# Go Go Gadget Scanner — Counter-Surveillance Scanner
 
-A native Android rebuild of a SentryRF-style counter-surveillance scanner.
+A native Android counter-surveillance scanner (SentryRF-style feature set).
 Everything runs on-device: no cloud, no accounts, no network calls.
 
 ## Capabilities

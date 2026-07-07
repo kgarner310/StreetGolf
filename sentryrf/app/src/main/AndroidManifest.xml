@@ -37,7 +37,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.sentryrf.scanner.fileprovider"
+            android:authorities="com.gogogadget.scanner.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

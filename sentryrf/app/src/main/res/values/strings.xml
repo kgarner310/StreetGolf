@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">SENTRY RF</string>
+    <string name="app_name">Go Go Gadget Scanner</string>
     <string name="tagline">Counter-surveillance scanner · 100% on-device</string>
 
     <string name="nav_scan">Scan</string>

@@ -1,4 +1,4 @@
-package com.sentryrf.scanner
+package com.gogogadget.scanner
 
 import android.bluetooth.le.ScanResult
 import android.os.ParcelUuid

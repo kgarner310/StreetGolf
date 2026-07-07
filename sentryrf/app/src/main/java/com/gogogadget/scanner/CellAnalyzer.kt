@@ -1,4 +1,4 @@
-package com.sentryrf.scanner
+package com.gogogadget.scanner
 
 import android.annotation.SuppressLint
 import android.content.Context

@@ -1,4 +1,4 @@
-package com.sentryrf.scanner
+package com.gogogadget.scanner
 
 import android.content.Context
 import android.content.Intent
@@ -38,9 +38,9 @@ object EvidenceReporter {
         }
 
         val payload = JSONObject().apply {
-            put("report_type", "Sentry RF counter-surveillance evidence report")
+            put("report_type", "Go Go Gadget Scanner counter-surveillance evidence report")
             put("generated_at", fmt.format(Date()))
-            put("generator", "Sentry RF rebuild v1.0 (on-device, no cloud)")
+            put("generator", "Go Go Gadget Scanner v1.0 (on-device, no cloud)")
             put("sighting_count", sightings.length())
             put("sightings", sightings)
         }
@@ -61,7 +61,7 @@ object EvidenceReporter {
         val file = File(dir, "sentryrf-evidence-${System.currentTimeMillis()}.json")
         file.writeText(full.toString(2))
 
-        val uri = FileProvider.getUriForFile(context, "com.sentryrf.scanner.fileprovider", file)
+        val uri = FileProvider.getUriForFile(context, "com.gogogadget.scanner.fileprovider", file)
         val share = Intent(Intent.ACTION_SEND).apply {
             type = "application/json"
             putExtra(Intent.EXTRA_STREAM, uri)

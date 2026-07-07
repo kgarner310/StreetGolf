@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace 'com.sentryrf.scanner'
+    namespace 'com.gogogadget.scanner'
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.sentryrf.scanner"
+        applicationId "com.gogogadget.scanner"
         minSdk 26
         targetSdk 35
         versionCode 1

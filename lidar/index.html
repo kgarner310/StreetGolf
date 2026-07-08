@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>LiDARy — North America LiDAR Explorer</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <canvas id="globe"></canvas>
+
+  <!-- top bar -->
+  <header id="topbar">
+    <div class="brand">
+      <span class="logo">◎</span>
+      <div>
+        <div class="title">LiDAR<span>y</span></div>
+        <div class="subtitle">North America elevation coverage · quality &amp; detail</div>
+      </div>
+    </div>
+    <div class="search">
+      <input id="search" type="text" placeholder="Search a state, province or country…" autocomplete="off" spellcheck="false">
+      <div id="suggest"></div>
+    </div>
+  </header>
+
+  <!-- left legend / controls -->
+  <aside id="controls">
+    <div class="card">
+      <div class="card-h">Color by</div>
+      <div class="seg" id="mode">
+        <button data-mode="score" class="on">Detail index</button>
+        <button data-mode="tier">Quality tier</button>
+        <button data-mode="cov">Coverage</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Legend <span id="legend-sub"></span></div>
+      <div id="legend"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">View</div>
+      <label class="row"><input type="checkbox" id="spin"> Auto-rotate globe</label>
+      <label class="row"><input type="checkbox" id="grat" checked> Graticule</label>
+      <label class="row"><input type="checkbox" id="flat"> Flat map</label>
+      <label class="row"><input type="checkbox" id="gapsOnly"> Highlight gaps only</label>
+      <button id="reset" class="ghost">Reset view</button>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Biggest gaps</div>
+      <ul id="gaps" class="gaps"></ul>
+    </div>
+  </aside>
+
+  <!-- right detail panel -->
+  <aside id="detail" class="hidden">
+    <button id="closeDetail" class="x">×</button>
+    <div id="detail-body"></div>
+  </aside>
+
+  <!-- bottom-left sources -->
+  <button id="srcBtn" class="ghost pill">Sources &amp; methodology</button>
+
+  <!-- hover tooltip -->
+  <div id="tip" class="hidden"></div>
+
+  <!-- sources modal -->
+  <div id="modal" class="hidden">
+    <div class="modal-card">
+      <button id="closeModal" class="x">×</button>
+      <h2>Sources &amp; methodology</h2>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="data/regions.js"></script>
+<script src="data/lidar_data.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

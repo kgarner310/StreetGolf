@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ad Closer</string>
+    <string name="service_label">Ad Closer</string>
+    <string name="service_description">Watches for full-screen ads in other apps and closes them for you: it presses Skip as soon as the countdown allows, and finds and taps the real close (X) button while avoiding fake ones.</string>
+
+    <string name="status_enabled">Accessibility service: ENABLED</string>
+    <string name="status_disabled">Accessibility service: DISABLED</string>
+    <string name="master_switch">Auto-close ads</string>
+    <string name="open_settings">Open Accessibility Settings</string>
+    <string name="how_it_works">How it works:\n\n• When an ad appears in another app, Ad Closer scans the screen.\n\n• If the ad has a countdown that can’t be shortened, it waits and taps the close button the moment it appears.\n\n• If a “Skip” button becomes available early, it presses it right away to cut the ad short.\n\n• It looks for the real X — small, in a corner, labelled close/dismiss — and ignores fake X buttons that would open the ad (Install, Learn more, Shop now…).\n\nTo activate: turn on the switch above, then enable “Ad Closer” in Accessibility Settings.</string>
+</resources>
